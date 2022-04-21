@@ -1,0 +1,46 @@
+---
+title: "Final_Project"
+author: "Sylvia Brown, Pierina Forastieri, Julia Buschmann, Marlyn Bruno"
+date: '2022-04-20'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+
+
+library(tidyverse)
+library(ipumsr)
+library(srvyr)
+library(haven)
+
+```
+
+
+```{r loading data}
+
+setwd("/Users/marlyn/Downloads/Intro_to_Data_Science/Final_Project")
+ddi <- read_ipums_ddi("cps_00002.xml")
+data <- read_ipums_micro(ddi) %>%
+  janitor::clean_names()
+cps_svy <- as_survey_design(data, weights = asecwt)
+#do we need to apply weights as well for our final project? 
+glimpse(data)
+
+asec2019 <- cps_svy %>%
+  filter(year == 2019 & month == 3)
+
+
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
