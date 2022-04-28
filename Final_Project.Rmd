@@ -86,7 +86,9 @@ asec_allyears <- cps_svy %>%
     citizen >= 2 & citizen <= 5 ~ 0,
     TRUE ~ NA_real_
   ))
-  # NOTE: the 'immigrant' variable is 1 for people born in the U.S.; 0 for people born in the U.S. outlying (PR, Guam), people born abroad of American parents, naturalized citizens, and non-citizens; and NA for people marked as NIU.
+  # NOTE: the 'immigrant' variable is 1 for people born in the U.S.; 0 for people born in the U.S. outlying territories (PR, Guam), people born abroad of American parents, naturalized citizens, and non-citizens; and NA for people marked as NIU.
+
+# CONSIDER ADDING A STEP WHERE WE SAVE INDICATORS AS FACTORS
 
 asec2019 <- asec_allyears %>%
   filter(year == 2019)
