@@ -9,29 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(warning = FALSE)
 knitr::opts_chunk$set(message = FALSE)
-
-
-library(tidyverse)
-library(ipumsr)
-library(srvyr)
-library(haven)
-
-```
-
-
-```{r loading data}
-
----
-title: "Final_Project"
-author: "Sylvia Brown, Pierina Forastieri, Julia Buschmann, Marlyn Bruno"
-date: '2022-04-20'
-output: html_document
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_chunk$set(warning = FALSE)
-knitr::opts_chunk$set(message = FALSE)
 ```
 
 ``` {r add-libraries}
@@ -135,3 +112,5 @@ asec2021_imm <- asec2021 %>%
   filter(immigrant == 1)
 
 # NOTE: FOR PCA, RECODE DUMMIES AS 0 AND SQRT(2)
+  
+```
