@@ -21,26 +21,117 @@ library(haven)
 
 ```{r loading data}
 
-setwd("/Users/marlyn/Downloads/Intro_to_Data_Science/Final_Project")
-ddi <- read_ipums_ddi("cps_00002.xml")
+---
+title: "Final_Project"
+author: "Sylvia Brown, Pierina Forastieri, Julia Buschmann, Marlyn Bruno"
+date: '2022-04-20'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+```
+
+``` {r add-libraries}
+library(tidyverse)
+library(ipumsr)
+library(srvyr)
+library(haven)
+```
+
+
+```{r loading data}
+ddi <- read_ipums_ddi("data/cps_00004.xml")
 data <- read_ipums_micro(ddi) %>%
   janitor::clean_names()
-cps_svy <- as_survey_design(data, weights = asecwt)
-#do we need to apply weights as well for our final project? 
-glimpse(data)
 
-asec2019 <- cps_svy %>%
-  filter(year == 2019 & month == 3)
+cps_svy <- as_survey_design(data, weights = asecwtcvd)
+# We use just the asecwtcvd weights because they are available for 2019-2021 ASECs (not just 2020)
 
+asec_allyears <- cps_svy %>%
+  filter(empstat != 1) %>% #filter out people in armed forces
+  mutate(employed = case_when(
+    empstat == 10 | empstat == 12 ~ 1,
+    empstat == 20 | empstat == 22 ~ 0,
+    TRUE ~ NA_real_
+  )) %>%
+  mutate(offpov_dum = case_when(
+    offpov == 2 ~ 1,
+    offpov == 1 ~ 0,
+    TRUE ~ NA_real_
+  )) %>%
+  mutate(himcarenw_dum = case_when(
+    himcarenw == 2 ~ 1,
+    himcarenw == 1 ~ 0
+  )) %>%
+  mutate(caidnw_dum = case_when(
+    caidnw == 2 ~ 1,
+    caidnw == 1 ~ 0
+  )) %>%
+  mutate(anycovly_dum = case_when(
+    anycovly == 2 ~ 1,
+    anycovly == 1 ~ 0,
+    TRUE ~ NA_real_
+  )) %>%
+  mutate(prvtcovnw_dum = case_when(
+    prvtcovnw == 2 ~ 1,
+    prvtcovnw == 1 ~ 0
+  )) %>%
+  mutate(grpcovnw_dum = case_when(
+    grpcovnw == 2 ~ 1,
+    grpcovnw == 1 ~ 0
+  )) %>%
+  mutate(mrkcovnw_dum = case_when(
+    mrkcovnw == 2 ~ 1,
+    mrkcovnw == 1 ~ 0
+  )) %>%
+  mutate(mrkscovnw_dum = case_when(
+    mrkscovnw == 2 ~ 1,
+    mrkscovnw == 1 ~ 0
+  )) %>%
+  mutate(mrkucovnw_dum = case_when(
+    mrkucovnw == 2 ~ 1,
+    mrkucovnw == 1 ~ 0
+  )) %>%
+  mutate(inhcovnw_dum = case_when(
+    inhcovnw == 2 ~ 1,
+    inhcovnw == 1 ~ 0
+  )) %>%
+  mutate(sex_dum = case_when(
+    sex == 2 ~ 1,
+    sex == 1 ~ 0,
+    TRUE ~ NA_real_
+  )) %>%
+  mutate(immigrant = case_when(
+    citizen == 1 ~ 1,
+    citizen >= 2 & citizen <= 5 ~ 0,
+    TRUE ~ NA_real_
+  ))
+  # NOTE: the 'immigrant' variable is 1 for people born in the U.S.; 0 for people born in the U.S. outlying territories (PR, Guam), people born abroad of American parents, naturalized citizens, and non-citizens; and NA for people marked as NIU.
 
-```
+# CONSIDER ADDING A STEP WHERE WE SAVE INDICATORS AS FACTORS
 
-## Including Plots
+asec2019 <- asec_allyears %>%
+  filter(year == 2019)
 
-You can also embed plots, for example:
+asec2020 <- asec_allyears %>%
+  filter(year == 2020)
 
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
+asec2021 <- asec_allyears %>%
+  filter(year == 2021)
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+asec_allyears_imm <- asec_allyears %>%
+  filter(immigrant == 1)
+
+asec2019_imm <- asec2019 %>%
+  filter(immigrant == 1)
+
+asec2020_imm <- asec2020 %>%
+  filter(immigrant == 1)
+
+asec2021_imm <- asec2021 %>%
+  filter(immigrant == 1)
+
+# NOTE: FOR PCA, RECODE DUMMIES AS 0 AND SQRT(2)
