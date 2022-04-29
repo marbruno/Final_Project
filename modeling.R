@@ -5,27 +5,71 @@ library(tidymodels)
 
 # New modeling script
 # Create tibble with 2019 and 2020 data for model training, testing
+# Removes variable we're trying to predict (employed)
 asec_2019_2020 <- asec_allyears %>%
-  filter(year == 2019 | year == 2020)
+  filter(year == 2019 | year == 2020) %>%
+  filter(!is.na(employed))
   
 
 # ------------------------------------PCA------------------------------------
 # Select numeric variables from data set
 asec_pca_2019_2020 <- asec_2019_2020 %>%
-  select(-year, -serial, -cpsid, -immigrant, -asecwtcvd)
-  # HERE IS WHERE WE SHOULD RESCALE FROM 0 TO SQRT(N)
-  
-  # mutate_at(vars(offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw, mrkscovnw, inhcovnw, sex), list(~ case_when(
-  #   . == 1 ~ sqrt(2),
-  #   . == 0 ~ 0,
-  #   TRUE ~ NA_real_
-  # ))) 
+  select(-year, -serial, -cpsid, -immigrant, -asecwtcvd) %>% # deselect variables we don't want to include in PCA analysis
+  select(-region, -statefip, -metro, -metarea, -metfips, -statefip) %>% # deselect all location variables other than county
+  select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
+  mutate_at(vars(race, unitsstr, citizen, hispan,
+            occ, ind, educ, classwly,
+            strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
 
+# SYLVIA: attempt at making dummy variables, but it didn't work....
 asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
-  step_dummy(region, statefip, metro, metarea, metfips, ) %>%
+  step_dummy(race, unitsstr, citizen, hispan,
+             occ, ind, educ, classwly,
+             strechlk, spmmort, whymove, health, paidgh) %>%
   prep() %>%
   bake(data = NULL)
+
   
+# Note: did not include in step_dummy: hhincome, age, yrimmig, existing indicator variables (sex,
+# offpov, disabwrk, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw, 
+# mrkscovnw, inhcovnw, schipnw), wksunem1, wksunem2, ftotval, inctto, incwelfr, 
+# incunemp, ctccrd, eitcred, moop, hipval
+
+# SYLVIA: this is where I will recode the dummy variables to have values 0 and sqrt(n)
+# asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
+#   mutate_at(
+#     vars(
+#       offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw,
+#       mrkscovnw, inhcovnw, mrkucovnw, sex
+#     ),
+#     list( ~ case_when(. == 1 ~ sqrt(2),
+#                       . == 0 ~ 0,
+#                       TRUE ~ NA_real_))
+#   ) %>%
+#   mutate_at(
+#     vars(
+#       offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw,
+#       mrkscovnw, inhcovnw, mrkucovnw, sex
+#     ),
+#     list( ~ case_when(. == 1 ~ sqrt(2),
+#                       . == 0 ~ 0,
+#                       TRUE ~ NA_real_))
+#   )
+
+
+# SYLVIA NOTE: the code below can be deleted, because we can center and scale the variables in prcomp--we don't need a recipe!
+# # create a recipe with no outcome variable and all predictors
+# pca_rec <- recipe(~., data = asec_numeric_2019_2020) %>%
+#   # center and scale all predictors
+#   step_center(all_predictors()) %>%
+#   step_scale(all_predictors()) %>%
+#   # run prep to prepare recipe
+#   prep()
+# 
+# # apply recipe to data
+# employment_clust <- pca_rec %>%
+#   bake(new_data = NULL)
+
 # create a correlation matrix on employment_clust
 cor(asec_pca_2019_2020)
 
