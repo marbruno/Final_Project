@@ -24,10 +24,7 @@ ddi <- read_ipums_ddi("data/cps_00004.xml")
 data <- read_ipums_micro(ddi) %>%
   janitor::clean_names()
 
-cps_svy <- as_survey_design(data, weights = asecwtcvd)
-# We use just the asecwtcvd weights because they are available for 2019-2021 ASECs (not just 2020)
-
-asec_allyears <- cps_svy %>%
+cps_svy <- data %>%
   filter(empstat != 1) %>% #filter out people in armed forces
   mutate(employed = case_when(
     empstat == 10 | empstat == 12 ~ 1,
@@ -121,6 +118,8 @@ asec_allyears <- cps_svy %>%
   # NOTE: the 'immigrant' variable is 1 for people born in the U.S.; 0 for people born in the U.S. outlying territories (PR, Guam), people born abroad of American parents, naturalized citizens, and non-citizens; and NA for people marked as NIU.
 
 # CONSIDER ADDING A STEP WHERE WE SAVE INDICATORS AS FACTORS
+
+asec_allyears <- as_survey_design(cps_svy, weights = asecwtcvd)
 
 asec2019 <- asec_allyears %>%
   filter(year == 2019)
