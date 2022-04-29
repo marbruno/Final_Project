@@ -31,7 +31,7 @@ asec_allyears <- cps_svy %>%
   filter(empstat != 1) %>% #filter out people in armed forces
   mutate(employed = case_when(
     empstat == 10 | empstat == 12 ~ 1,
-    empstat == 20 | empstat == 22 ~ 0,
+    empstat == 21 | empstat == 22 ~ 0,
     TRUE ~ NA_real_
   )) %>%
   mutate_at(vars(offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw, mrkscovnw, mrkucovnw, inhcovnw, sex), list(~ case_when(
