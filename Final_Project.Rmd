@@ -1,7 +1,7 @@
 ---
 title: "Final_Project"
 author: "Sylvia Brown, Pierina Forastieri, Julia Buschmann, Marlyn Bruno"
-date: '2022-04-20'
+date: "2022-04-20"
 output: html_document
 ---
 
@@ -34,58 +34,90 @@ asec_allyears <- cps_svy %>%
     empstat == 20 | empstat == 22 ~ 0,
     TRUE ~ NA_real_
   )) %>%
-  mutate(offpov_dum = case_when(
-    offpov == 2 ~ 1,
-    offpov == 1 ~ 0,
+  mutate_at(vars(offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw, mrkscovnw, inhcovnw, sex), list(~ case_when(
+    . == 2 ~ 1,
+    . == 1 ~ 0,
     TRUE ~ NA_real_
+  ))) %>%
+  mutate(unitsstr = case_when(
+    unitsstr == 00 ~ NA_real_,
+    TRUE ~ as.numeric(unitsstr)
   )) %>%
-  mutate(himcarenw_dum = case_when(
-    himcarenw == 2 ~ 1,
-    himcarenw == 1 ~ 0
+  mutate(region = case_when(
+    region == 97 ~ NA_real_,
+    TRUE ~ as.numeric(region)
   )) %>%
-  mutate(caidnw_dum = case_when(
-    caidnw == 2 ~ 1,
-    caidnw == 1 ~ 0
+  filter(statefip <= 56) %>% # drop weird multi-state fips codes
+  mutate(metro = case_when(
+    metro == 0 | metro >= 4 ~ NA_real_,
+    TRUE ~ as.numeric(metro)
   )) %>%
-  mutate(anycovly_dum = case_when(
-    anycovly == 2 ~ 1,
-    anycovly == 1 ~ 0,
-    TRUE ~ NA_real_
+  mutate(metarea = case_when(
+    metarea >= 9997 ~ NA_real_,
+    TRUE ~ as.numeric(metarea)
   )) %>%
-  mutate(prvtcovnw_dum = case_when(
-    prvtcovnw == 2 ~ 1,
-    prvtcovnw == 1 ~ 0
+  mutate(metfips = case_when(
+    metfips >= 99998 ~ NA_real_,
+    TRUE ~ as.numeric(metfips)
   )) %>%
-  mutate(grpcovnw_dum = case_when(
-    grpcovnw == 2 ~ 1,
-    grpcovnw == 1 ~ 0
+  mutate(hhincome = case_when(
+    hhincome == 9999999 ~ NA_real_,
+    TRUE ~ as.numeric(hhincome)
   )) %>%
-  mutate(mrkcovnw_dum = case_when(
-    mrkcovnw == 2 ~ 1,
-    mrkcovnw == 1 ~ 0
+  mutate_at(vars(county, yrimmig, empstat, labforce, occ, classwly, ind, strechlk, whymove, disabwrk, paidgh), list(~ case_when(
+    . == 0 ~ NA_real_,
+    TRUE ~ as.numeric(.)
+  ))) %>%
+  mutate(wksunem1 = case_when(
+    wksunem1 == 99 ~ NA_real_,
+    TRUE ~ as.numeric(wksunem1)
   )) %>%
-  mutate(mrkscovnw_dum = case_when(
-    mrkscovnw == 2 ~ 1,
-    mrkscovnw == 1 ~ 0
+    mutate(educ = case_when(
+    educ == 001 | educ == 999 ~ NA_real_,
+    TRUE ~ as.numeric(educ)
   )) %>%
-  mutate(mrkucovnw_dum = case_when(
-    mrkucovnw == 2 ~ 1,
-    mrkucovnw == 1 ~ 0
+  mutate(wksunem2 = case_when(
+    wksunem2 == 9 ~ NA_real_,
+    TRUE ~ as.numeric(wksunem2)
   )) %>%
-  mutate(inhcovnw_dum = case_when(
-    inhcovnw == 2 ~ 1,
-    inhcovnw == 1 ~ 0
+  mutate(ftotval = case_when(
+    ftotval == 9999999999 ~ NA_real_,
+    TRUE ~ as.numeric(ftotval)
   )) %>%
-  mutate(sex_dum = case_when(
-    sex == 2 ~ 1,
-    sex == 1 ~ 0,
-    TRUE ~ NA_real_
+  mutate(inctot = case_when(
+    inctot == 999999999 ~ NA_real_,
+    TRUE ~ as.numeric(inctot)
+  )) %>%
+  mutate(incwelfr = case_when(
+    incwelfr == 999999 ~ NA_real_,
+    TRUE ~ incwelfr
+  )) %>%
+  mutate(incunemp = case_when(
+    incunemp == 999999 ~ NA_real_,
+    TRUE ~ as.numeric(incunemp)
+  )) %>%
+  mutate(ctccrd = case_when(
+    ctccrd == 999999 ~ NA_real_,
+    TRUE ~ as.numeric(ctccrd)
+  )) %>%
+  mutate(eitcred = case_when(
+    eitcred == 9999 ~ NA_real_,
+    TRUE ~ as.numeric(eitcred)
+  )) %>%
+  mutate(offpov = case_when(
+    offpov == 99 ~ NA_real_,
+    TRUE ~ as.numeric(offpov)
+  )) %>%
+  mutate(anycovly = case_when(
+    anycovly == 99 ~ NA_real_,
+    TRUE ~ as.numeric(anycovly)
   )) %>%
   mutate(immigrant = case_when(
     citizen == 1 ~ 1,
     citizen >= 2 & citizen <= 5 ~ 0,
     TRUE ~ NA_real_
-  ))
+  )) %>%
+  select(-starts_with("q"), -asecwt, -month, -asecflag, -statecensus, -asecwth, -pernum, -cpsidp) # Drop quality flags and variables we don't need
   # NOTE: the 'immigrant' variable is 1 for people born in the U.S.; 0 for people born in the U.S. outlying territories (PR, Guam), people born abroad of American parents, naturalized citizens, and non-citizens; and NA for people marked as NIU.
 
 # CONSIDER ADDING A STEP WHERE WE SAVE INDICATORS AS FACTORS
