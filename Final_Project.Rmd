@@ -34,7 +34,7 @@ asec_allyears <- cps_svy %>%
     empstat == 20 | empstat == 22 ~ 0,
     TRUE ~ NA_real_
   )) %>%
-  mutate_at(vars(offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw, mrkscovnw, inhcovnw, sex), list(~ case_when(
+  mutate_at(vars(offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw, mrkscovnw, mrkucovnw, inhcovnw, sex), list(~ case_when(
     . == 2 ~ 1,
     . == 1 ~ 0,
     TRUE ~ NA_real_
