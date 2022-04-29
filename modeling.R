@@ -13,8 +13,6 @@ asec_2019_2020 <- asec_allyears %>%
 # Select numeric variables from data set
 asec_pca_2019_2020 <- asec_2019_2020 %>%
   select(-year, -serial, -cpsid, -immigrant, -asecwtcvd)
-  # SYLVIA NOTE: we don't need the line of code below because all of the variable types are numeric (integer or numeric)
-  # select_if(is.numeric)
   # HERE IS WHERE WE SHOULD RESCALE FROM 0 TO SQRT(N)
   
   # mutate_at(vars(offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw, mrkscovnw, inhcovnw, sex), list(~ case_when(
@@ -28,20 +26,6 @@ asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
   prep() %>%
   bake(data = NULL)
   
-
-# SYLVIA NOTE: the code below can be deleted, because we can center and scale the variables in prcomp--we don't need a recipe!
-# # create a recipe with no outcome variable and all predictors
-# pca_rec <- recipe(~., data = asec_numeric_2019_2020) %>%
-#   # center and scale all predictors
-#   step_center(all_predictors()) %>%
-#   step_scale(all_predictors()) %>%
-#   # run prep to prepare recipe
-#   prep()
-# 
-# # apply recipe to data
-# employment_clust <- pca_rec %>%
-#   bake(new_data = NULL)
-
 # create a correlation matrix on employment_clust
 cor(asec_pca_2019_2020)
 
@@ -81,6 +65,9 @@ split <- initial_split(data = asec2019_2020, prop = 0.8)
 asec2019_2020_train <- training(asec2019_2020)
 asec2019_2020_test <- testing(asec2019_2020)
 
+# Set up 10 v-folds
+folds <- vfold_cv(data = asec2019_2020_train, v = 10)
+
 asec_rec <- 
   recipe(employed ~ ., data = asec2019_2020train) %>%
   update_role(serial, cpsid, cpsidp, new_role = "ID") %>%
@@ -90,8 +77,94 @@ asec_rec <-
   step_nzv(all_predictors()) %>%   # drop near zero variance predictors
   step_downsample(employed) # subsampling due to class imbalances between employment class 
 
-# Model 1: Random forest with hypertuning no. of trees, N_estimators
+# -------------------------Model 1: Random forest-------------------------------
+
+# Build a random forest model (hyperparametr tuning for no. of trees and predictors sampled at each split)
+rf_mod <- rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>%
+  set_engine("ranger", importance = "impurity") %>%
+  set_mode("classification")
+
+# Create a workflow
+rf_workflow <- 
+  workflow() %>% 
+  add_model(rf_mod) %>% 
+  add_recipe(asec_rec)
+
+# Create a grid of the parameters we're tuning for
+rf_grid <- grid_regular(
+  mtry(range = c(10, 50)), #MARLYN: I don't think we even have 50 predictors?
+  min_n(range = c(2, 8)),
+  levels = 5)
+
+# Execute hyperparameter tuning using the grid and the cross_validation folds
+rf_cv <- rf_workflow %>% 
+  tune_grid(rf_workflow,
+            resamples = folds,
+            grid = rf_grid,
+            metrics = metric_set(roc_auc, rmse))
+
+#Calculate RMSE and MAE for each fold 
+collect_metrics(rf_cv, summarize = FALSE) 
+
+# Select best model based on rmse (MARLYN note: we can choose to do it based on best roc_auc?)
+rf_best <- rf_cv %>%
+  select_best(metric = "roc_auc")
+
+# Finalize workflow with best model
+rf_last_workflow <- rf_workflow %>%
+  finalize_workflow(parameters = rf_best)
+
+# Fit to the all training data
+set.seed(20220429) #MARLYN: is it best practice to set a seed before last fit?
+rf_last_fit <- rf_last_workflow %>%
+  last_fit(split = asec2019_2020_train)
+
+# Look at feature importance
+rf_last_fit %>%
+  extract_fit_parsnip() %>%
+  vip(num_features = 20)
+
+# -------------------------Model 2: Logistic Regression------------------------------
 
 # Model 2: Logistic regression 
 
-# Model 3: K Nearest Neighbor? Decision Tree?
+# Build the model (hyperparameter tuning for penalty)
+logistic_mod <- 
+  logistic_reg(penalty = tune(), mixture = 1) %>% 
+  set_engine("glmnet")
+
+# Create a workflow
+logistic_workflow <- 
+  workflow() %>% 
+  add_model(logistic_mod) %>% 
+  add_recipe(asec_rec)
+
+# Create a grid of penalty values to tune
+logistic_grid <- grid_regular(penalty(), levels = 10)
+
+# Execute hyperparameter tuning using the grid and the cross_validation folds
+logistic_cv <- logistic_workflow %>% 
+  tune_grid(resamples = folds,
+            grid = logistic_grid,
+            metrics = metric_set(roc_auc, rmse))
+
+# Calculate RMSE and MAE for each fold 
+collect_metrics(logistic_cv, summarize = FALSE) 
+
+# Select best model based on rmse (MARLYN note: we can choose to do it based on best roc_auc?)
+logistic_best <- logistic_cv %>%
+  select_best(metric = "roc_auc")
+
+# Finalize workflow with best model
+logistic_last_workflow <- logistic_wf %>%
+  finalize_workflow(parameters = logistic_best)
+
+# Fit to the all training data and check feature importance
+set.seed(20220428) #MARLYN: is it best practice to set a seed before last fit?
+logistic_last_fit <- logistic_last_workflow %>%
+  last_fit(data = asec2019_2020_train) %>% 
+  extract_fit_parsnip() %>%
+  #vi(lambda = logistic_best$penalty) #Do we need this line for logistic reg.?
+  vip(num_features = 20) #looking at feature importance
+
+# -------------------------Model 3: KNN? Decision?-------------------------------
