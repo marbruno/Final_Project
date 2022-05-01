@@ -16,6 +16,10 @@ library(tidyverse)
 library(ipumsr)
 library(srvyr)
 library(haven)
+library(formattable)
+library(ggalt)
+library(labelled)
+library(sjlabelled)
 ```
 
 
@@ -145,3 +149,177 @@ asec2021_imm <- asec2021 %>%
 # NOTE: FOR PCA, RECODE DUMMIES AS 0 AND SQRT(2)
   
 ```
+
+```{r EDA}
+# % unemployed, employed, out of labor force in each 
+asec_allyears %>%
+  drop_na(employed) %>%
+  select(year, employed) %>%
+  group_by(year, employed) %>%
+  summarise(pct = survey_prop()) %>%
+  ggplot(aes(x=year, y=pct, fill=factor(employed))) + 
+  geom_col(position="dodge") +
+  labs(
+    title = "Percentage of Unemployed and Employed Out of the Labor Force",
+    subtitle = "(in % for 2019, 2020, 2021)",
+    caption = "Source: IPUMS. Data",
+    x = "Year",
+    y = "%",
+    fill = "Status",
+  ) +
+  scale_fill_hue(labels = c("Unemployed", "Employed")) +
+  theme(legend.title = element_blank()) +
+  theme_minimal()
+ 
+
+# How does employment vary by age?
+# employed
+asec_allyears %>%
+   mutate(
+    # Create categories
+    age_group = case_when(
+      age <= 14            ~ "0-14",
+      age > 14 & age <= 24 ~ "15-24",
+      age > 24 & age <= 34 ~ "25-34",
+      age > 34 & age <= 44 ~ "35-44",
+      age > 44 & age <= 54 ~ "45-54",
+      age > 54 & age <= 64 ~ "55-64",
+      age > 64 & age <= 74 ~ "65-74",
+      age > 74 ~ "75+"
+    )) %>%
+  drop_na(employed) %>%
+  filter(employed == 1) %>%
+  select(year, employed, age, age_group) %>%
+  group_by(year, age_group) %>%
+  summarise(cnt = n()) %>%
+  mutate(freq = percent(cnt / sum(cnt))) %>%
+  ggplot(aes(x=age_group, y=freq, fill=factor(year))) + 
+  geom_col(position="dodge") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Employed by Age Group",
+    subtitle = "(for 2019, 2020, 2021)",
+    caption = "Source: IPUMS. Data",
+    x = "Age Group",
+    y = "",
+    fill = "Year",
+  ) +
+  theme(legend.title = element_blank()) +
+  theme_minimal()
+
+# unemployed
+asec_allyears %>%
+   mutate(
+    # Create categories
+    age_group = case_when(
+      age <= 14            ~ "0-14",
+      age > 14 & age <= 24 ~ "15-24",
+      age > 24 & age <= 34 ~ "25-34",
+      age > 34 & age <= 44 ~ "35-44",
+      age > 44 & age <= 54 ~ "45-54",
+      age > 54 & age <= 64 ~ "55-64",
+      age > 64 & age <= 74 ~ "65-74",
+      age > 74 ~ "75+"
+    )) %>%
+  drop_na(employed) %>%
+  filter(employed == 0) %>%
+  select(year, employed, age, age_group) %>%
+  group_by(year, age_group) %>%
+  summarise(cnt = n()) %>%
+  mutate(freq = percent(cnt / sum(cnt))) %>%
+  ggplot(aes(x=age_group, y=freq, fill=factor(year))) + 
+  geom_col(position="dodge") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Unmployed by Age Group",
+    subtitle = "(in % for 2019, 2020, 2021)",
+    caption = "Source: IPUMS. Data",
+    x = "Age Group",
+    y = "",
+    fill = "Status",
+  ) +
+  theme(legend.title = element_blank()) +
+  theme_minimal()
+
+# put this two graphs side by side
+
+
+# this is trying to put unemployed and employed together but I cant find the way to also divide by year
+# asec_allyears %>%
+#    mutate(
+#     # Create categories
+#     age_group = case_when(
+#       age <= 14            ~ "0-14",
+#       age > 14 & age <= 24 ~ "15-24",
+#       age > 24 & age <= 34 ~ "25-34",
+#       age > 34 & age <= 44 ~ "35-44",
+#       age > 44 & age <= 54 ~ "45-54",
+#       age > 54 & age <= 64 ~ "55-64",
+#       age > 64 & age <= 74 ~ "65-74",
+#       age > 74 ~ "75+"
+#     )) %>%
+#   drop_na(employed) %>%
+#   filter(empstat != 30) %>%
+#   select(year, employed, age, age_group) %>%
+#   group_by(year, employed, age_group) %>%
+#   summarise(cnt = n()) %>%
+#   mutate(freq = percent(cnt / sum(cnt))) %>%
+#   ggplot(aes(x=age_group, y=freq, fill=factor(employed))) + 
+#   geom_col(position="dodge") +
+#   coord_flip() +
+#   scale_y_continuous(labels = scales::percent) +
+#   labs(
+#     title = "Percentage of Unemployed and Employed Out of the Labor Force",
+#     subtitle = "(in % for 2019, 2020, 2021)",
+#     caption = "Source: IPUMS. Data",
+#     x = "Age Group",
+#     y = "",
+#     fill = "Status",
+#   ) +
+#   scale_fill_hue(labels = c("Unemployed", "Employed")) +
+#   theme(legend.title = element_blank()) +
+#   theme_minimal()
+
+# dumbbell % unemployed by state between 2019 and 2020
+status_bystate <- asec_allyears %>%
+  drop_na(employed) %>%
+  filter(year ==2019 | year == 2020) %>%
+  select(year, employed, statefip) %>%
+  group_by(year, statefip, employed) %>% 
+  summarise(cnt = n()) %>%
+  mutate(freq = percent(cnt / sum(cnt))) 
+
+status_bystate %>%
+  filter(employed == 0) %>%
+  select(year, statefip, freq) %>%
+  pivot_wider(names_from = year, values_from = freq) %>%
+  ggplot(aes(x=`2019`, xend=`2020`, y=as_label(statefip))) +
+  geom_dumbbell(color="#a3c4dc", 
+                colour_x="#edae52", 
+                      colour_xend = "#9fb059",
+                      size=0.75, 
+                      point.colour.l="#0e668b") + 
+  scale_x_continuous(label=percent)  +
+  labs(
+    title = "Unemployed by State",
+    subtitle = "(2019 'yellow' and 2020 'green')",
+    caption = "Source: IPUMS. Data",
+    x = "",
+    y = "States",
+  ) +
+  theme_minimal()
+
+# percentage change of unemployed people 
+asec_allyears %>%
+  drop_na(employed) %>%
+  select(year, employed) %>%
+  group_by(year, employed) %>%
+  summarise(cnt = n()) %>%
+  filter(employed == 0) %>%
+  mutate(pct_change = round((cnt/lag(cnt) - 1) * 100, 2))
+  # why I get NA if round((a$cnt/lag(a$cnt) - 1) * 100, 2) works. being a the table before mutate
+
+```
+
