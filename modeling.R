@@ -21,6 +21,13 @@ asec_pca_2019_2020 <- asec_2019_2020 %>%
             occ, ind, educ, classwly,
             strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
 
+#health: 1 variable: "health"
+#Paid: 1 variable: "paidgh"
+
+asec_pca_2019_2020 %>% 
+  select(starts_with("paidgh")) %>% 
+  names()
+
 # SYLVIA: need to double check that this works properly
 asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
   step_dummy(race, unitsstr, citizen, hispan,
@@ -76,12 +83,28 @@ asec_pcs <- bind_cols(
 )
 
 # ---------------------------------Model prep---------------------------------
+
+# Preparing data for models
+asec_2019_2020 <- asec_allyears %>%
+  filter(year == 2019 | year == 2020) %>%
+  filter(!is.na(employed)) %>%
+  mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
+  select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include as predictors
+  select(-region, -statefip, -metro, -metarea, -metfips, -statefip) %>% # deselect most location variables other than county
+  select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
+  mutate_at(vars(race, unitsstr, citizen, hispan,
+                 occ, ind, educ, classwly,
+                 strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
+
+# Save as a data frame? Try this to see if we can get split to run
+asec_2019_2020_df <- as_tibble(asec_2019_2020)
+
 # Set seed so that selection of training/testing data is consistent between runs
 # of the code chunk
 set.seed(20201020)
 
 # Split into training and testing data
-split <- initial_split(data = asec2019_2020, prop = 0.8)
+split <- initial_split(data = asec2019_2020, prop = 0.8, strata = employed)
 
 asec2019_2020_train <- training(asec2019_2020)
 asec2019_2020_test <- testing(asec2019_2020)
@@ -89,6 +112,7 @@ asec2019_2020_test <- testing(asec2019_2020)
 # Set up 10 v-folds
 folds <- vfold_cv(data = asec2019_2020_train, v = 10)
 
+# Create recipe
 asec_rec <- 
   recipe(employed ~ ., data = asec2019_2020train) %>%
   update_role(serial, cpsid, cpsidp, new_role = "ID") %>%
@@ -150,8 +174,7 @@ rf_last_fit %>%
 # Model 2: Logistic regression 
 
 # Build the model (hyperparameter tuning for penalty)
-logistic_mod <- 
-  logistic_reg(penalty = tune(), mixture = 1) %>% 
+logistic_mod <- logistic_reg(penalty = tune(), mixture = 1) %>% 
   set_engine("glmnet")
 
 # Create a workflow
@@ -177,7 +200,7 @@ logistic_best <- logistic_cv %>%
   select_best(metric = "roc_auc")
 
 # Finalize workflow with best model
-logistic_last_workflow <- logistic_wf %>%
+logistic_last_workflow <- logistic_workflow %>%
   finalize_workflow(parameters = logistic_best)
 
 # Fit to the all training data and check feature importance
@@ -185,12 +208,50 @@ set.seed(20220428) #MARLYN: is it best practice to set a seed before last fit?
 logistic_last_fit <- logistic_last_workflow %>%
   last_fit(data = asec2019_2020_train) %>% 
   extract_fit_parsnip() %>%
-  #vi(lambda = logistic_best$penalty) #Do we need this line for logistic reg.?
+  vi(lambda = logistic_best$penalty)
   vip(num_features = 20) #looking at feature importance
 
-# -------------------------Model 3: KNN? Decision tree?-------------------------------
+# -------------------------Model 3: KNN-----------------------------------------
+# Build the model (hyperparameter tuning for no. of neighbors and weight function)
+knn_mod <- nearest_neighbor(neighbors = tune(), weight_func = tune()) %>% 
+    set_engine("kknn") %>% 
+    set_mode("classifiation")
+
+# Create a workflow
+knn_workflow <- workflow() %>% 
+    add_model(knn_mod) %>% 
+    add_recipe(asec_rec)
+
+# Define parameters to hypertune
+knn_param <- 
+  knn_wflow %>% 
+  parameters() %>% 
+  update(
+    `long df` = spline_degree(c(2, 18)), 
+    `lat df` = spline_degree(c(2, 18)),
+    neighbors = neighbors(c(3, 50)),
+    weight_func = weight_func(values = c("rectangular", "inv", "gaussian", "triangular", "optimal"))
+  )
+
+# Execute hyperparameter tuning using the set parameters and the cross_validation folds
+knn_cv <- logistic_workflow %>% 
+  tune_grid(resamples = folds, #maybe tune_bayesian?
+            param_info = knn_param,
+            metrics = metric_set(roc_auc, rmse))
+
+# Calculate RMSE and MAE for each fold 
+collect_metrics(knn_cv, summarize = FALSE) 
+
+# Select best model based on rmse (MARLYN note: we can choose to do it based on best roc_auc?)
+knn_best <- knn_cv %>%
+  select_best(metric = "roc_auc")
+
+# Finalize workflow with best model
+knn_last_workflow <- knn_workflow %>%
+  finalize_workflow(parameters = knn_best)
+
+# -------------Running the best model specification on the 2021 data------------
 
 
-# -------------------------Running the best model on the 2021 data--------------
 
 # -------------------------Run model on immigrant data--------------------------
