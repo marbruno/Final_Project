@@ -156,17 +156,20 @@ asec_allyears %>%
   drop_na(employed) %>%
   select(year, employed) %>%
   group_by(year, employed) %>%
-  summarise(pct = survey_prop()) %>%
+  summarise(pct = survey_prop()*100) %>%
   ggplot(aes(x=year, y=pct, fill=factor(employed))) + 
   geom_col(position="dodge") +
   labs(
     title = "Percentage of Unemployed and Employed Out of the Labor Force",
     subtitle = "(in % for 2019, 2020, 2021)",
-    caption = "Source: IPUMS. Data",
+    caption = "Source: IPUMS Data",
     x = "Year",
     y = "%",
     fill = "Status",
   ) +
+  geom_text(aes(label = round(pct,2)), 
+                position = position_dodge(width = 1), 
+                color="black",vjust = -.2) +
   scale_fill_hue(labels = c("Unemployed", "Employed")) +
   theme(legend.title = element_blank()) +
   theme_minimal()
@@ -195,12 +198,13 @@ asec_allyears %>%
   mutate(freq = percent(cnt / sum(cnt))) %>%
   ggplot(aes(x=age_group, y=freq, fill=factor(year))) + 
   geom_col(position="dodge") +
+  geom_text(aes(age_group, label = freq), position = position_dodge(width = 1), hjust = -.25) +
   coord_flip() +
-  scale_y_continuous(labels = scales::percent) +
+  scale_y_continuous(labels = scales::percent, limits = c(0,.3)) +
   labs(
     title = "Employed by Age Group",
     subtitle = "(for 2019, 2020, 2021)",
-    caption = "Source: IPUMS. Data",
+    caption = "Source: IPUMS Data",
     x = "Age Group",
     y = "",
     fill = "Year",
@@ -230,12 +234,13 @@ asec_allyears %>%
   mutate(freq = percent(cnt / sum(cnt))) %>%
   ggplot(aes(x=age_group, y=freq, fill=factor(year))) + 
   geom_col(position="dodge") +
+  geom_text(aes(age_group, label = freq), position = position_dodge(width = 1), hjust = -.25) +
   coord_flip() +
-  scale_y_continuous(labels = scales::percent) +
+  scale_y_continuous(labels = scales::percent, limits = c(0,.35)) +
   labs(
-    title = "Unmployed by Age Group",
+    title = "Unemployed by Age Group",
     subtitle = "(in % for 2019, 2020, 2021)",
-    caption = "Source: IPUMS. Data",
+    caption = "Source: IPUMS Data",
     x = "Age Group",
     y = "",
     fill = "Status",
@@ -273,7 +278,7 @@ asec_allyears %>%
 #   labs(
 #     title = "Percentage of Unemployed and Employed Out of the Labor Force",
 #     subtitle = "(in % for 2019, 2020, 2021)",
-#     caption = "Source: IPUMS. Data",
+#     caption = "Source: IPUMS Data",
 #     x = "Age Group",
 #     y = "",
 #     fill = "Status",
@@ -301,24 +306,29 @@ status_bystate %>%
                       colour_xend = "#9fb059",
                       size=0.75, 
                       point.colour.l="#0e668b") + 
-  scale_x_continuous(label=percent)  +
+  scale_x_continuous(label = percent)  +
   labs(
     title = "Unemployed by State",
     subtitle = "(2019 'yellow' and 2020 'green')",
-    caption = "Source: IPUMS. Data",
+    caption = "Source: IPUMS Data",
     x = "",
     y = "States",
   ) +
-  theme_minimal()
+  theme_minimal() +
+  scale_color_ipsum(name = "")
 
 # percentage change of unemployed people 
-asec_allyears %>%
+a <- asec_allyears %>%
   drop_na(employed) %>%
   select(year, employed) %>%
   group_by(year, employed) %>%
   summarise(cnt = n()) %>%
-  filter(employed == 0) %>%
-  mutate(pct_change = round((cnt/lag(cnt) - 1) * 100, 2))
+  filter(employed == 0)
+
+# PIERINA: CAN YOU FIX THIS SO THAT IT LOOKS LIKE THE VERSION THAT WORKS? I COULDN'T FIGURE OUT
+# HOW TO REPLICATE....
+a %>%
+  mutate(pct_change = round((a$cnt/lag(a$cnt) - 1) * 100, 2))
   # why I get NA if round((a$cnt/lag(a$cnt) - 1) * 100, 2) works. being a the table before mutate
 
 ```
