@@ -4,15 +4,6 @@
 library(tidymodels)
 library(survey)
 
-asec_allyears %>%
-  drop_na(employed) %>%
-  select(year, employed) %>%
-  group_by(year, employed) %>%
-  summarise(cnt = n()) %>%
-  filter(employed == 0) %>%
-  mutate(pct_change = round((cnt/lag(cnt) - 1) * 100, 2))
-# why I get NA if round((a$cnt/lag(a$cnt) - 1) * 100, 2) works. being a the table before mutate
-
 # New modeling script
 # Create tibble with 2019 and 2020 data for model training, testing
 # Removes variable we're trying to predict (employed)
@@ -31,14 +22,8 @@ asec_pca_2019_2020 <- asec_2019_2020 %>%
             occ, ind, educ, classwly,
             strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
 
-#health: 1 variable: "health"
-#Paid: 1 variable: "paidgh"
-
-asec_pca_2019_2020 %>% 
-  select(starts_with("paidgh")) %>% 
-  names()
-
-# SYLVIA: need to double check that this works properly
+# SYLVIA: need to fix this according to the following link
+# https://github.com/tidymodels/recipes/issues/83
 asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
   step_dummy(race, unitsstr, citizen, hispan,
              occ, ind, educ, classwly,
@@ -140,10 +125,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
   as_survey_design(weights = asecwtcvd)
 
 # conduct PCA on the asec_pca_2019_2020 data
-  # code below will center and scale the data
-
-svyprcomp(~county + hhincome + asecwtcvd + age + sex + yrimmig + wksunem1 + wksunem2 + ftotval + inctot + incwelfr,
-          design = asec_pca_2019_2020, scale. = TRUE)
+  # code below will center but not scale the data
 
 asec_pca <-
   svyprcomp(
@@ -345,7 +327,7 @@ asec_pcs <- bind_cols(
 # ---------------------------------Model prep---------------------------------
 
 # Preparing data for models
-asec_2019_2020 <- asec_allyears %>%
+asec2019_2020 <- asec_allyears %>%
   filter(year == 2019 | year == 2020) %>%
   filter(!is.na(employed)) %>%
   mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
@@ -357,30 +339,36 @@ asec_2019_2020 <- asec_allyears %>%
                  strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
 
 # Save as a data frame? Try this to see if we can get split to run
-asec_2019_2020_df <- as_tibble(asec_2019_2020)
+asec2019_2020_df <- as_tibble(asec2019_2020)
 
 # Set seed so that selection of training/testing data is consistent between runs
 # of the code chunk
 set.seed(20201020)
 
 # Split into training and testing data
-split <- initial_split(data = asec2019_2020, prop = 0.8, strata = employed)
+split <- initial_split(data = asec2019_2020_df, prop = 0.8, strata = employed)
 
-asec2019_2020_train <- training(asec2019_2020)
-asec2019_2020_test <- testing(asec2019_2020)
+asec2019_2020_train <- training(split)
+asec2019_2020_test <- testing(split)
 
 # Set up 10 v-folds
 folds <- vfold_cv(data = asec2019_2020_train, v = 10)
 
+# Convert back to survey object
+asec2019_2020_train <- asec2019_2020_train %>%
+  as_survey_design(weights = asecwtcvd)
+asec2019_2020_test <- asec2019_2020_train %>%
+  as_survey_design(weights = asecwtcvd)
+
 # Create recipe
 asec_rec <- 
-  recipe(employed ~ ., data = asec2019_2020train) %>%
-  update_role(serial, cpsid, cpsidp, new_role = "ID") %>%
+  recipe(employed ~ ., data = asec2019_2020_train) %>%
+  #update_role(serial, cpsid, cpsidp, new_role = "ID") %>%
   step_dummy(all_nominal_predictors()) %>% # dummy encode categorical predictors 
   step_center(all_predictors()) %>% # center predictors
   step_scale(all_predictors()) %>% # scale predictors
   step_nzv(all_predictors()) %>%   # drop near zero variance predictors
-  step_downsample(employed) # subsampling due to class imbalances between employment class 
+  themis::step_downsample(employed) # subsampling due to class imbalances between employment class 
 
 # -------------------------Model 1: Random forest-------------------------------
 
