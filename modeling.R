@@ -5,15 +5,6 @@ library(tidymodels)
 library(survey)
 library(parsnip)
 
-asec_allyears %>%
-  drop_na(employed) %>%
-  select(year, employed) %>%
-  group_by(year, employed) %>%
-  summarise(cnt = n()) %>%
-  filter(employed == 0) %>%
-  mutate(pct_change = round((cnt/lag(cnt) - 1) * 100, 2))
-# why I get NA if round((a$cnt/lag(a$cnt) - 1) * 100, 2) works. being a the table before mutate
-
 # New modeling script
 # Create tibble with 2019 and 2020 data for model training, testing
 # Removes variable we're trying to predict (employed)
@@ -32,11 +23,10 @@ asec_pca_2019_2020 <- asec_2019_2020 %>%
             occ, ind, educ, classwly,
             strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
 
-asec_pca_2019_2020 %>% 
-  select(starts_with("paidgh")) %>% 
-  names()
 
-# SYLVIA: need to double check that this works properly
+
+# SYLVIA: need to fix this according to the following link
+# https://github.com/tidymodels/recipes/issues/83
 asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
   step_dummy(race, unitsstr, citizen, hispan,
              occ, ind, educ, classwly,
@@ -138,10 +128,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
   as_survey_design(weights = asecwtcvd)
 
 # conduct PCA on the asec_pca_2019_2020 data
-  # code below will center and scale the data
-
-svyprcomp(~county + hhincome + asecwtcvd + age + sex + yrimmig + wksunem1 + wksunem2 + ftotval + inctot + incwelfr,
-          design = asec_pca_2019_2020, scale. = TRUE)
+  # code below will center but not scale the data
 
 asec_pca <-
   svyprcomp(
@@ -357,6 +344,7 @@ asec_models_2019_2020 <- asec_2019_2020 %>%
 # Save as a data frame? Try this to see if we can get split to run
 #asec_2019_2020_df <- as_tibble(asec_2019_2020)
 
+
 # Set seed so that selection of training/testing data is consistent between runs
 # of the code chunk
 set.seed(20201020)
@@ -377,6 +365,12 @@ asec_test_weighted <- asec2019_2020_test %>%
 
 # Set up 10 v-folds
 folds <- vfold_cv(data = asec_train, v = 10)
+
+# Convert back to survey object
+asec2019_2020_train <- asec2019_2020_train %>%
+  as_survey_design(weights = asecwtcvd)
+asec2019_2020_test <- asec2019_2020_train %>%
+  as_survey_design(weights = asecwtcvd)
 
 # Create recipe
 asec_rec <- 
