@@ -3,6 +3,7 @@
 # Loading libraries
 library(tidymodels)
 library(survey)
+library(parsnip)
 
 # New modeling script
 # Create tibble with 2019 and 2020 data for model training, testing
@@ -21,6 +22,8 @@ asec_pca_2019_2020 <- asec_2019_2020 %>%
   mutate_at(vars(race, unitsstr, citizen, hispan,
             occ, ind, educ, classwly,
             strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
+
+
 
 # SYLVIA: need to fix this according to the following link
 # https://github.com/tidymodels/recipes/issues/83
@@ -327,7 +330,7 @@ asec_pcs <- bind_cols(
 # ---------------------------------Model prep---------------------------------
 
 # Preparing data for models
-asec2019_2020 <- asec_allyears %>%
+asec_models_2019_2020 <- asec_2019_2020 %>%
   filter(year == 2019 | year == 2020) %>%
   filter(!is.na(employed)) %>%
   mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
@@ -339,20 +342,29 @@ asec2019_2020 <- asec_allyears %>%
                  strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
 
 # Save as a data frame? Try this to see if we can get split to run
-asec2019_2020_df <- as_tibble(asec2019_2020)
+#asec_2019_2020_df <- as_tibble(asec_2019_2020)
+
 
 # Set seed so that selection of training/testing data is consistent between runs
 # of the code chunk
 set.seed(20201020)
 
 # Split into training and testing data
-split <- initial_split(data = asec2019_2020_df, prop = 0.8, strata = employed)
+split <- initial_split(data = asec_models_2019_2020, prop = 0.8)
 
 asec2019_2020_train <- training(split)
 asec2019_2020_test <- testing(split)
 
+# Reapply ASEC weights and save as tibble
+asec_train_weighted <- asec2019_2020_train %>%
+  as_survey_design(weights = asecwtcvd)
+#asec_train <- as_tibble(asec_train_weighted)
+asec_test_weighted <- asec2019_2020_test %>%
+  as_survey_design(weights = asecwtcvd)
+#asec_test <- as_tibble(asec_test_weighted)
+
 # Set up 10 v-folds
-folds <- vfold_cv(data = asec2019_2020_train, v = 10)
+folds <- vfold_cv(data = asec_train, v = 10)
 
 # Convert back to survey object
 asec2019_2020_train <- asec2019_2020_train %>%
@@ -362,7 +374,7 @@ asec2019_2020_test <- asec2019_2020_train %>%
 
 # Create recipe
 asec_rec <- 
-  recipe(employed ~ ., data = asec2019_2020_train) %>%
+  recipe(employed ~ ., data = asec_train_weighted) %>%
   #update_role(serial, cpsid, cpsidp, new_role = "ID") %>%
   step_dummy(all_nominal_predictors()) %>% # dummy encode categorical predictors 
   step_center(all_predictors()) %>% # center predictors
@@ -394,7 +406,7 @@ rf_cv <- rf_workflow %>%
   tune_grid(rf_workflow,
             resamples = folds,
             grid = rf_grid,
-            metrics = metric_set(roc_auc, rmse))
+            metrics = metric_set(roc_auc, accuracy))
 
 #Calculate RMSE and MAE for each fold 
 collect_metrics(rf_cv, summarize = FALSE) 
@@ -438,7 +450,7 @@ logistic_grid <- grid_regular(penalty(), levels = 10)
 logistic_cv <- logistic_workflow %>% 
   tune_grid(resamples = folds,
             grid = logistic_grid,
-            metrics = metric_set(roc_auc, rmse))
+            metrics = metric_set(roc_auc, accuracy))
 
 # Calculate RMSE and MAE for each fold 
 collect_metrics(logistic_cv, summarize = FALSE) 
@@ -461,9 +473,9 @@ logistic_last_fit <- logistic_last_workflow %>%
 
 # -------------------------Model 3: KNN-----------------------------------------
 # Build the model (hyperparameter tuning for no. of neighbors and weight function)
-knn_mod <- nearest_neighbor(neighbors = tune(), weight_func = tune()) %>% 
+knn_mod <- nearest_neighbor(neighbors = tune()) %>% 
     set_engine("kknn") %>% 
-    set_mode("classifiation")
+    set_mode("classification")
 
 # Create a workflow
 knn_workflow <- workflow() %>% 
@@ -471,21 +483,25 @@ knn_workflow <- workflow() %>%
     add_recipe(asec_rec)
 
 # Define parameters to hypertune
-knn_param <- 
-  knn_wflow %>% 
-  parameters() %>% 
-  update(
-    `long df` = spline_degree(c(2, 18)), 
-    `lat df` = spline_degree(c(2, 18)),
-    neighbors = neighbors(c(3, 50)),
-    weight_func = weight_func(values = c("rectangular", "inv", "gaussian", "triangular", "optimal"))
-  )
+#knn_param <- 
+ # knn_workflow %>% 
+  #hardhat::extract_parameter_set_dials() %>% 
+  #update(
+   # `long df` = spline_degree(c(2, 18)), 
+    #`lat df` = spline_degree(c(2, 18)),
+    #neighbors = neighbors(c(3, 50)),
+    #weight_func = weight_func(values = c("rectangular", "inv", "gaussian", "triangular", "optimal"))
+  #)
+
+# MARLYN: Error in neighbors(range = c(1, 15)) : unused argument (range = c(1, 15))?
+knn_grid <- grid_regular(neighbors(range = c(5, 21)), levels = 9)
 
 # Execute hyperparameter tuning using the set parameters and the cross_validation folds
-knn_cv <- logistic_workflow %>% 
+knn_cv <- knn_workflow %>% 
   tune_grid(resamples = folds, #maybe tune_bayesian?
-            param_info = knn_param,
-            metrics = metric_set(roc_auc, rmse))
+            grid = knn_grid,
+            control = control_grid(save_pred = TRUE),
+            metrics = metric_set(rmse, roc_auc))
 
 # Calculate RMSE and MAE for each fold 
 collect_metrics(knn_cv, summarize = FALSE) 
