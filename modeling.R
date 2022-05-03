@@ -13,27 +13,32 @@ asec_2019_2020 <- cps_svy %>%
   
 
 # ------------------------------------PCA------------------------------------
+
+# IMPUTATION: impute ind and oct?
 # Select numeric variables from data set
 asec_pca_2019_2020 <- asec_2019_2020 %>%
   select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include in PCA analysis
-  select(-region, -statefip, -metro, -metarea, -metfips, -statefip) %>% # deselect all location variables other than county
+  select(-region, -county, -metro, -metarea, -metfips) %>% # deselect all location variables other than state
+  select(-yrimmig, -wksunem1, wksunem2, -whymove) %>% # deselect variables that many people have not responded to resulting in many NAs; also excluded from PCA
   select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
   mutate_at(vars(race, unitsstr, citizen, hispan,
             occ, ind, educ, classwly,
             strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
 
-# SYLVIA: need to fix this according to the following link
-# https://github.com/tidymodels/recipes/issues/83
+# AARON: can we include values that were not ansewrd by everyone in the PCA and
+# in the modeling and if so, how?
+
 asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
   step_dummy(race, unitsstr, citizen, hispan,
              occ, ind, educ, classwly,
-             strechlk, spmmort, whymove, health, paidgh) %>%
+             strechlk, spmmort, whymove, health, paidgh, one_hot = TRUE) %>%
   prep() %>%
   bake(asec_pca_2019_2020)
 # Note: did not include in step_dummy: hhincome, age, yrimmig, existing indicator variables (sex,
 # offpov, disabwrk, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw, 
 # mrkscovnw, inhcovnw, schipnw), wksunem1, wksunem2, ftotval, inctto, incwelfr, 
 # incunemp, ctccrd, eitcred, moop, hipval
+# QUESTION FOR AARON: should we use one-hot encoding for PCA instead of step_dummy?
 
 asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
   mutate_at(
@@ -41,7 +46,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
       offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw,
       mrkscovnw, inhcovnw, mrkucovnw, sex, starts_with("strechlk"), starts_with("spmmort")
     ),
-    list( ~ case_when(. == 1 ~ sqrt(2),
+    list( ~ case_when(. == 1 ~ 1/sqrt(3),
                       . == 0 ~ 0,
                       TRUE ~ NA_real_))
   ) %>%
@@ -49,7 +54,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
     vars(
       starts_with("citizen"), starts_with("health")
     ),
-    list( ~ case_when(. == 1 ~ sqrt(4),
+    list( ~ case_when(. == 1 ~ 1/sqrt(5),
                       . == 0 ~ 0,
                       TRUE ~ NA_real_))
   ) %>%
@@ -57,7 +62,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
     vars(
       starts_with("unitsstr")
     ),
-    list( ~ case_when(. == 1 ~ sqrt(5),
+    list( ~ case_when(. == 1 ~ 1/sqrt(7),
                       . == 0 ~ 0,
                       TRUE ~ NA_real_))
   ) %>%
@@ -65,7 +70,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
     vars(
       starts_with("classwly")
     ),
-    list( ~ case_when(. == 1 ~ sqrt(6),
+    list( ~ case_when(. == 1 ~ 1/sqrt(8),
                       . == 0 ~ 0,
                       TRUE ~ NA_real_))
   ) %>%
@@ -73,7 +78,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
     vars(
       starts_with("hispan")
     ),
-    list( ~ case_when(. == 1 ~ sqrt(8),
+    list( ~ case_when(. == 1 ~ 1/sqrt(9),
                       . == 0 ~ 0,
                       TRUE ~ NA_real_))
   ) %>%
@@ -81,15 +86,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
     vars(
       starts_with("educ")
     ),
-    list( ~ case_when(. == 1 ~ sqrt(15),
-                      . == 0 ~ 0,
-                      TRUE ~ NA_real_))
-  ) %>%
-  mutate_at(
-    vars(
-      starts_with("whymove")
-    ),
-    list( ~ case_when(. == 1 ~ sqrt(19),
+    list( ~ case_when(. == 1 ~ 1/sqrt(16),
                       . == 0 ~ 0,
                       TRUE ~ NA_real_))
   ) %>%
@@ -97,7 +94,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
     vars(
       starts_with("race")
     ),
-    list( ~ case_when(. == 1 ~ sqrt(25),
+    list( ~ case_when(. == 1 ~ 1/sqrt(26),
                       . == 0 ~ 0,
                       TRUE ~ NA_real_))
   ) %>%
@@ -105,7 +102,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
     vars(
       starts_with("ind")
     ),
-    list( ~ case_when(. == 1 ~ sqrt(278),
+    list( ~ case_when(. == 1 ~ 1/sqrt(279),
                       . == 0 ~ 0,
                       TRUE ~ NA_real_))
   ) %>%
@@ -113,33 +110,32 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
     vars(
       starts_with("occ")
     ),
-    list( ~ case_when(. == 1 ~ sqrt(632),
+    list( ~ case_when(. == 1 ~ 1/sqrt(633),
                       . == 0 ~ 0,
                       TRUE ~ NA_real_))
   )
-  
-  
-  # SYLVIA: is it okay that it seems to drop base categories? also, because it drops base cateogries, should
-  # I add one to the categories (starting with strechlk)?
+
 asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
   as_survey_design(weights = asecwtcvd)
 
 # conduct PCA on the asec_pca_2019_2020 data
-  # code below will center but not scale the data
+  # code below will center and scale the data
+  # MARLYN/AARON: this won't run without having imputed values where the NAs are
 
+# AARON: WAY TO DO THIS MORE ELEGANTLY?
 asec_pca <-
   svyprcomp(
-    ~ county + hhincome + asecwtcvd + age + sex + yrimmig + wksunem1 + wksunem2 +
+    ~ county + hhincome + asecwtcvd + age + sex +
       ftotval + inctot + incwelfr + incunemp + ctccrd + eitcred + offpov + disabwrk +
       himcarenw + caidnw + moop + hipval + anycovly + prvtcovnw + grpcovnw + mrkcovnw +
-      mrkscovnw + mrkucovnw + inhcovnw + schipnw + employed + race_X200 + race_X300 +
+      mrkscovnw + mrkucovnw + inhcovnw + schipnw + employed + race_X100 + race_X200 + race_X300 +
       race_X651 + race_X652 + race_X801 + race_X802 + race_X803 + race_X804 +
       race_X805 + race_X806 + race_X807 + race_X808 + race_X809 + race_X810 +
       race_X811 + race_X812 + race_X813 + race_X814 + race_X815 + race_X816 +
-      race_X817 + race_X818 + race_X819 + race_X820 + race_X830 + unitsstr_X5 +
-      unitsstr_X6 + unitsstr_X7 + unitsstr_X11 + unitsstr_X12 + citizen_X2 + citizen_X3 +
+      race_X817 + race_X818 + race_X819 + race_X820 + race_X830 + unitsstr_X1 + unitsstr_X5 +
+      unitsstr_X6 + unitsstr_X7 + unitsstr_X11 + unitsstr_X12 + citizen_X1 + citizen_X2 + citizen_X3 +
       citizen_X4 + citizen_X5 + hispan_X100 + hispan_X200 + hispan_X300 + hispan_X400 +
-      hispan_X500 + hispan_X600 + hispan_X611 + hispan_X612 + occ_X20 + occ_X40 +
+      hispan_X500 + hispan_X600 + hispan_X611 + hispan_X0 + hispan_X612 + occ_X10 + occ_X20 + occ_X40 +
       occ_X50 + occ_X51 + occ_X52 + occ_X60 + occ_X100 + occ_X101 + occ_X102 +
       occ_X110 + occ_X120 + occ_X135 + occ_X136 + occ_X137 + occ_X140 + occ_X150 +
       occ_X160 + occ_X205 + occ_X220 + occ_X230 + occ_X300 + occ_X310 + occ_X330 +
@@ -243,7 +239,7 @@ asec_pca <-
       occ_X9360 + occ_X9365 + occ_X9410 + occ_X9415 + occ_X9420 + occ_X9430 +
       occ_X9510 + occ_X9520 + occ_X9560 + occ_X9570 + occ_X9600 + occ_X9610 +
       occ_X9620 + occ_X9630 + occ_X9640 + occ_X9645 + occ_X9650 + occ_X9720 +
-      occ_X9750 + occ_X9760 + occ_X9840 + ind_X180 + ind_X190 + ind_X270 + ind_X280 +
+      occ_X9750 + occ_X9760 + occ_X9840 + ind_X170 + ind_X180 + ind_X190 + ind_X270 + ind_X280 +
       ind_X290 + ind_X370 + ind_X380 + ind_X390 + ind_X470 + ind_X490 + ind_X570 +
       ind_X580 + ind_X590 + ind_X670 + ind_X680 + ind_X690 + ind_X770 + ind_X1070 +
       ind_X1080 + ind_X1090 + ind_X1170 + ind_X1180 + ind_X1190 + ind_X1270 +
@@ -291,17 +287,12 @@ asec_pca <-
       ind_X9380 + ind_X9390 + ind_X9470 + ind_X9480 + ind_X9490 + ind_X9570 +
       ind_X9590 + ind_X9890 + educ_X10 + educ_X20 + educ_X30 + educ_X40 + educ_X50 +
       educ_X60 + educ_X71 + educ_X73 + educ_X81 + educ_X91 + educ_X92 + educ_X111 +
-      educ_X123 + educ_X124 + educ_X125 + classwly_X14 + classwly_X22 +
+      educ_X123 + educ_X124 + educ_X125 + classwly_X13 + classwly_X14 + classwly_X22 +
       classwly_X25 +
-      classwly_X27 + classwly_X28 + classwly_X29 + strechlk_X3 + strechlk_X4 +
-      spmmort_X2 +
-      spmmort_X3 + whymove_X2 + whymove_X3 + whymove_X4 + whymove_X5 + whymove_X6 +
-      whymove_X7 +
-      whymove_X8 + whymove_X9 + whymove_X10 + whymove_X11 + whymove_X12 +
-      whymove_X13 + whymove_X14 +
-      whymove_X15 + whymove_X16 + whymove_X17 + whymove_X18 + whymove_X19 +
-      whymove_X20 + health_X2 +
-      health_X3 + health_X4 + health_X5 + paidgh_X21 + paidgh_X22, design = asec_pca_2019_2020, scale. = FALSE)
+      classwly_X27 + classwly_X28 + classwly_X29 + strechlk_X1 + strechlk_X3 + strechlk_X4 +
+      spmmort_X2 + + spmmort_X1 +
+      spmmort_X3 + health_X1 + health_X2 +
+      health_X3 + health_X4 + health_X5 + paidgh_X10 + paidgh_X21 + paidgh_X22, design = asec_pca_2019_2020, scale. = FALSE, scores = TRUE)
 
 # obtain summary metrics
 summary(asec_pca)
@@ -309,15 +300,12 @@ summary(asec_pca)
 # obtain loadings
 asec_pca$rotation
 
+# AARON: HOW CAN I EXTRACT PCS?
 # obtain component values for each observation
-pca_data <- as_tibble(asec_pca$x) %>%
+pca_data <- as_tibble(asec_pca$x[,"PC1"]) %>%
   select(PC1:PC10)
 
-# extract the PCs
-asec_pcs <- asec_pca %>%
-  .$x %>%
-  as_tibble()
-
+# SYLVIA: NEED OT FIX THIS
 # combine the pcs to the names and parties
 asec_pcs <- bind_cols(
   asec2019_2020,
@@ -357,7 +345,7 @@ folds <- vfold_cv(data = asec2019_2020_train, v = 10)
 # Convert back to survey object
 asec2019_2020_train <- asec2019_2020_train %>%
   as_survey_design(weights = asecwtcvd)
-asec2019_2020_test <- asec2019_2020_train %>%
+asec2019_2020_test <- asec2019_2020_test %>%
   as_survey_design(weights = asecwtcvd)
 
 # Create recipe
