@@ -65,21 +65,13 @@ cps_svy <- data %>%
     hhincome == 9999999 ~ NA_real_,
     TRUE ~ as.numeric(hhincome)
   )) %>%
-  mutate_at(vars(county, yrimmig, empstat, labforce, occ, classwly, ind, strechlk, whymove, disabwrk, paidgh), list(~ case_when(
+  mutate_at(vars(county, empstat, labforce, disabwrk), list(~ case_when(
     . == 0 ~ NA_real_,
     TRUE ~ as.numeric(.)
   ))) %>%
-  mutate(wksunem1 = case_when(
-    wksunem1 == 99 ~ NA_real_,
-    TRUE ~ as.numeric(wksunem1)
-  )) %>%
     mutate(educ = case_when(
     educ == 001 | educ == 999 ~ NA_real_,
     TRUE ~ as.numeric(educ)
-  )) %>%
-  mutate(wksunem2 = case_when(
-    wksunem2 == 9 ~ NA_real_,
-    TRUE ~ as.numeric(wksunem2)
   )) %>%
   mutate(ftotval = case_when(
     ftotval == 9999999999 ~ NA_real_,
@@ -121,8 +113,6 @@ cps_svy <- data %>%
   select(-starts_with("q"), -asecwt, -month, -asecflag, -statecensus, -asecwth, -pernum, -cpsidp) # Drop quality flags and variables we don't need
   # NOTE: the 'immigrant' variable is 1 for people born in the U.S.; 0 for people born in the U.S. outlying territories (PR, Guam), people born abroad of American parents, naturalized citizens, and non-citizens; and NA for people marked as NIU.
 
-# CONSIDER ADDING A STEP WHERE WE SAVE INDICATORS AS FACTORS
-
 asec_allyears <- as_survey_design(cps_svy, weights = asecwtcvd)
 
 asec2019 <- asec_allyears %>%
@@ -145,8 +135,6 @@ asec2020_imm <- asec2020 %>%
 
 asec2021_imm <- asec2021 %>%
   filter(immigrant == 1)
-
-# NOTE: FOR PCA, RECODE DUMMIES AS 0 AND SQRT(2)
   
 ```
 
@@ -314,8 +302,7 @@ status_bystate %>%
     x = "",
     y = "States",
   ) +
-  theme_minimal() +
-  scale_color_ipsum(name = "")
+  theme_minimal()
 
 # percentage change of unemployed people 
 a <- asec_allyears %>%
