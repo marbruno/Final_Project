@@ -15,16 +15,18 @@ asec_2019_2020 <- cps_svy %>%
 
 # ------------------------------------PCA------------------------------------
 
-# IMPUTATION: impute ind and oct?
+# yrimmig, wksunem1, wksunem2, strechlk still TBD -- have removed from any processing but will need to add back in
+# missing column creation: occ, ind, classwly, whymove, paidgh [already done, NEED TO SCALE INDICATORS by sqrt(n)]
+# SYLVIA: MAKE DUMMY FOR STATEFIP (and weight it)
+
 # Select numeric variables from data set
 asec_pca_2019_2020 <- asec_2019_2020 %>%
   select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include in PCA analysis
   select(-region, -county, -metro, -metarea, -metfips) %>% # deselect all location variables other than state
-  select(-yrimmig, -wksunem1, wksunem2, -whymove) %>% # deselect variables that many people have not responded to resulting in many NAs; also excluded from PCA
   select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
   mutate_at(vars(race, unitsstr, citizen, hispan,
             occ, ind, educ, classwly,
-            strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
+            strechlk, spmmort, health, paidgh, whymove, statefip), list(~ as.factor(.)))
 
 
 # AARON: can we include values that were not ansewrd by everyone in the PCA and
@@ -32,7 +34,7 @@ asec_pca_2019_2020 <- asec_2019_2020 %>%
 asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
   step_dummy(race, unitsstr, citizen, hispan,
              occ, ind, educ, classwly,
-             strechlk, spmmort, whymove, health, paidgh, one_hot = TRUE) %>%
+             strechlk, spmmort, whymove, health, paidgh, statefip) %>%
   prep() %>%
   bake(asec_pca_2019_2020)
 # Note: did not include in step_dummy: hhincome, age, yrimmig, existing indicator variables (sex,
@@ -40,14 +42,16 @@ asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
 # mrkscovnw, inhcovnw, schipnw), wksunem1, wksunem2, ftotval, inctto, incwelfr, 
 # incunemp, ctccrd, eitcred, moop, hipval
 # QUESTION FOR AARON: should we use one-hot encoding for PCA instead of step_dummy?
+# NO, IT DOESN'T MATTER, DON'T INCLUDE
 
+# SYLVIA: MAKE SURE THAT THIS FIRST MUTATE_AT IS ALL VARIABLES W2 CATEGORIES
 asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
   mutate_at(
     vars(
       offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw,
-      mrkscovnw, inhcovnw, mrkucovnw, sex, starts_with("strechlk"), starts_with("spmmort")
+      mrkscovnw, inhcovnw, mrkucovnw, sex, starts_with("spmmort")
     ),
-    list( ~ case_when(. == 1 ~ 1/sqrt(3),
+    list( ~ case_when(. == 1 ~ (1/sqrt(2)),
                       . == 0 ~ 0,
                       TRUE ~ NA_real_))
   ) %>%
@@ -101,6 +105,14 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
   ) %>%
   mutate_at(
     vars(
+      starts_with("state")
+    ),
+    list( ~ case_when(. == 1 ~ 1/sqrt(50),
+                      . == 0 ~ 0,
+                      TRUE ~ NA_real_)) 
+    ) %>%
+  mutate_at(
+    vars(
       starts_with("ind")
     ),
     list( ~ case_when(. == 1 ~ 1/sqrt(279),
@@ -116,7 +128,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
                       TRUE ~ NA_real_))
   )
 
-asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
+asec_pca_2019_2020_weighted <- asec_pca_2019_2020 %>%
   as_survey_design(weights = asecwtcvd)
 
 # conduct PCA on the asec_pca_2019_2020 data
@@ -124,6 +136,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
   # MARLYN/AARON: this won't run without having imputed values where the NAs are
 
 # AARON: WAY TO DO THIS MORE ELEGANTLY?
+# USE ~. 
 asec_pca <-
   svyprcomp(
     ~ county + hhincome + asecwtcvd + age + sex +
@@ -293,7 +306,7 @@ asec_pca <-
       classwly_X27 + classwly_X28 + classwly_X29 + strechlk_X1 + strechlk_X3 + strechlk_X4 +
       spmmort_X2 + + spmmort_X1 +
       spmmort_X3 + health_X1 + health_X2 +
-      health_X3 + health_X4 + health_X5 + paidgh_X10 + paidgh_X21 + paidgh_X22, design = asec_pca_2019_2020, scale. = FALSE, scores = TRUE)
+      health_X3 + health_X4 + health_X5 + paidgh_X10 + paidgh_X21 + paidgh_X22, design = asec_pca_2019_2020_weighted, scale. = FALSE, scores = TRUE)
 
 # obtain summary metrics
 summary(asec_pca)
@@ -321,14 +334,11 @@ asec_models_2019_2020 <- asec_2019_2020 %>%
   filter(!is.na(employed)) %>%
   mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
   select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include as predictors
-  select(-region, -statefip, -metro, -metarea, -metfips, -statefip) %>% # deselect most location variables other than county
+  select(-region, -county, -metro, -metarea, -metfips) %>% # deselect most location variables other than county
   select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
   mutate_at(vars(race, unitsstr, citizen, hispan,
                  occ, ind, educ, classwly,
-                 strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
-
-# Save as a data frame? Try this to see if we can get split to run
-#asec_2019_2020_df <- as_tibble(asec_2019_2020)
+                 strechlk, spmmort, whymove, health, paidgh, statefip), list(~ as.factor(.)))
 
 
 # Set seed so that selection of training/testing data is consistent between runs
@@ -338,8 +348,8 @@ set.seed(20201020)
 # Split into training and testing data
 split <- initial_split(data = asec_models_2019_2020, prop = 0.8)
 
-asec2019_2020_train <- training(split)
-asec2019_2020_test <- testing(split)
+asec_train <- remove_val_labels(training(split))
+asec_test <- remove_val_labels(testing(split))
 
 # Reapply ASEC weights and save as tibble
 asec_train_weighted <- asec2019_2020_train %>%
@@ -352,21 +362,18 @@ asec_test_weighted <- asec2019_2020_test %>%
 # Set up 10 v-folds
 folds <- vfold_cv(data = asec_train, v = 10)
 
-# Convert back to survey object
-asec2019_2020_train <- asec2019_2020_train %>%
-  as_survey_design(weights = asecwtcvd)
-asec2019_2020_test <- asec2019_2020_test %>%
-  as_survey_design(weights = asecwtcvd)
-
 # Create recipe
-asec_rec <- 
-  recipe(employed ~ ., data = asec_train_weighted) %>%
-  #update_role(serial, cpsid, cpsidp, new_role = "ID") %>%
-  step_dummy(all_nominal_predictors()) %>% # dummy encode categorical predictors 
+asec_rec <-
+  recipe(employed ~ ., data = asec_train) %>%
+  step_dummy(race, unitsstr, citizen, hispan,
+             occ, ind, educ, classwly,
+             strechlk, spmmort, whymove, health, paidgh, statefip) %>%
+
   step_center(all_predictors()) %>% # center predictors
   step_scale(all_predictors()) %>% # scale predictors
   step_nzv(all_predictors()) %>%   # drop near zero variance predictors
-  themis::step_downsample(employed) # subsampling due to class imbalances between employment class 
+  themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class 
+  step_other() 
 
 # -------------------------Model 1: Random forest-------------------------------
 
@@ -455,50 +462,8 @@ logistic_last_fit <- logistic_last_workflow %>%
   last_fit(data = asec2019_2020_train) %>% 
   extract_fit_parsnip() %>%
   vi(lambda = logistic_best$penalty)
-  vip(num_features = 20) #looking at feature importance
+vip(num_features = 20) #looking at feature importance
 
-# -------------------------Model 3: KNN-----------------------------------------
-# Build the model (hyperparameter tuning for no. of neighbors and weight function)
-knn_mod <- nearest_neighbor(neighbors = tune()) %>% 
-    set_engine("kknn") %>% 
-    set_mode("classification")
-
-# Create a workflow
-knn_workflow <- workflow() %>% 
-    add_model(knn_mod) %>% 
-    add_recipe(asec_rec)
-
-# Define parameters to hypertune
-#knn_param <- 
- # knn_workflow %>% 
-  #hardhat::extract_parameter_set_dials() %>% 
-  #update(
-   # `long df` = spline_degree(c(2, 18)), 
-    #`lat df` = spline_degree(c(2, 18)),
-    #neighbors = neighbors(c(3, 50)),
-    #weight_func = weight_func(values = c("rectangular", "inv", "gaussian", "triangular", "optimal"))
-  #)
-
-# MARLYN: Error in neighbors(range = c(1, 15)) : unused argument (range = c(1, 15))?
-knn_grid <- grid_regular(neighbors(range = c(5, 21)), levels = 9)
-
-# Execute hyperparameter tuning using the set parameters and the cross_validation folds
-knn_cv <- knn_workflow %>% 
-  tune_grid(resamples = folds, #maybe tune_bayesian?
-            grid = knn_grid,
-            control = control_grid(save_pred = TRUE),
-            metrics = metric_set(rmse, roc_auc))
-
-# Calculate RMSE and MAE for each fold 
-collect_metrics(knn_cv, summarize = FALSE) 
-
-# Select best model based on rmse (MARLYN note: we can choose to do it based on best roc_auc?)
-knn_best <- knn_cv %>%
-  select_best(metric = "roc_auc")
-
-# Finalize workflow with best model
-knn_last_workflow <- knn_workflow %>%
-  finalize_workflow(parameters = knn_best)
 
 # -------------Running the best model specification on the 2021 data------------
 
