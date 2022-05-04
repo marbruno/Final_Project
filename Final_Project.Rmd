@@ -30,6 +30,7 @@ data <- read_ipums_micro(ddi) %>%
 
 cps_svy <- data %>%
   filter(empstat != 1) %>% #filter out people in armed forces
+  filter(age >= 18 & age < 66) %>% #filter out minors; leave only adults
   mutate(employed = case_when(
     empstat == 10 | empstat == 12 ~ 1,
     empstat == 21 | empstat == 22 ~ 0,
@@ -169,14 +170,13 @@ asec_allyears %>%
    mutate(
     # Create categories
     age_group = case_when(
-      age <= 14            ~ "0-14",
-      age > 14 & age <= 24 ~ "15-24",
-      age > 24 & age <= 34 ~ "25-34",
-      age > 34 & age <= 44 ~ "35-44",
-      age > 44 & age <= 54 ~ "45-54",
-      age > 54 & age <= 64 ~ "55-64",
-      age > 64 & age <= 74 ~ "65-74",
-      age > 74 ~ "75+"
+      age > 17 & age <= 25 ~ "18-24",
+      age > 24 & age <= 31 ~ "25-31",
+      age > 21 & age <= 38 ~ "32-38",
+      age > 38 & age <= 45 ~ "39-45",
+      age > 45 & age <= 52 ~ "46-52",
+      age > 52 & age <= 59 ~ "53-59",
+      age > 59 & age <= 65 ~ "60-65"
     )) %>%
   drop_na(employed) %>%
   filter(employed == 1) %>%
@@ -203,16 +203,15 @@ asec_allyears %>%
 # unemployed
 asec_allyears %>%
    mutate(
-    # Create categories
+    # Create categories (18-24; 24-30; 31-37; 38-44, 45-51, 52-58, 58-64)
     age_group = case_when(
-      age <= 14            ~ "0-14",
-      age > 14 & age <= 24 ~ "15-24",
-      age > 24 & age <= 34 ~ "25-34",
-      age > 34 & age <= 44 ~ "35-44",
-      age > 44 & age <= 54 ~ "45-54",
-      age > 54 & age <= 64 ~ "55-64",
-      age > 64 & age <= 74 ~ "65-74",
-      age > 74 ~ "75+"
+      age > 17 & age <= 25 ~ "18-24",
+      age > 24 & age <= 31 ~ "25-31",
+      age > 21 & age <= 38 ~ "32-38",
+      age > 38 & age <= 45 ~ "39-45",
+      age > 45 & age <= 52 ~ "46-52",
+      age > 52 & age <= 59 ~ "53-59",
+      age > 59 & age <= 65 ~ "60-65"
     )) %>%
   drop_na(employed) %>%
   filter(employed == 0) %>%

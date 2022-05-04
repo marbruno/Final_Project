@@ -3,6 +3,7 @@
 # Loading libraries
 library(tidymodels)
 library(survey)
+library(parsnip)
 
 # New modeling script
 # Create tibble with 2019 and 2020 data for model training, testing
@@ -27,9 +28,9 @@ asec_pca_2019_2020 <- asec_2019_2020 %>%
             occ, ind, educ, classwly,
             strechlk, spmmort, health, paidgh, whymove, statefip), list(~ as.factor(.)))
 
+
 # AARON: can we include values that were not ansewrd by everyone in the PCA and
 # in the modeling and if so, how?
-
 asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
   step_dummy(race, unitsstr, citizen, hispan,
              occ, ind, educ, classwly,
@@ -339,6 +340,7 @@ asec_models_2019_2020 <- asec_2019_2020 %>%
                  occ, ind, educ, classwly,
                  strechlk, spmmort, whymove, health, paidgh, statefip), list(~ as.factor(.)))
 
+
 # Set seed so that selection of training/testing data is consistent between runs
 # of the code chunk
 set.seed(20201020)
@@ -349,6 +351,14 @@ split <- initial_split(data = asec_models_2019_2020, prop = 0.8)
 asec_train <- remove_val_labels(training(split))
 asec_test <- remove_val_labels(testing(split))
 
+# Reapply ASEC weights and save as tibble
+asec_train_weighted <- asec2019_2020_train %>%
+  as_survey_design(weights = asecwtcvd)
+#asec_train <- as_tibble(asec_train_weighted)
+asec_test_weighted <- asec2019_2020_test %>%
+  as_survey_design(weights = asecwtcvd)
+#asec_test <- as_tibble(asec_test_weighted)
+
 # Set up 10 v-folds
 folds <- vfold_cv(data = asec_train, v = 10)
 
@@ -358,6 +368,7 @@ asec_rec <-
   step_dummy(race, unitsstr, citizen, hispan,
              occ, ind, educ, classwly,
              strechlk, spmmort, whymove, health, paidgh, statefip) %>%
+
   step_center(all_predictors()) %>% # center predictors
   step_scale(all_predictors()) %>% # scale predictors
   step_nzv(all_predictors()) %>%   # drop near zero variance predictors
