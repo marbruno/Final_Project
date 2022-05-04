@@ -321,15 +321,11 @@ asec_models_2019_2020 <- asec_2019_2020 %>%
   filter(!is.na(employed)) %>%
   mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
   select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include as predictors
-  select(-region, -statefip, -metro, -metarea, -metfips, -statefip) %>% # deselect most location variables other than county
+  select(-region, -county, -metro, -metarea, -metfips) %>% # deselect most location variables other than county
   select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
   mutate_at(vars(race, unitsstr, citizen, hispan,
                  occ, ind, educ, classwly,
                  strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
-
-# Save as a data frame? Try this to see if we can get split to run
-#asec_2019_2020_df <- as_tibble(asec_2019_2020)
-
 
 # Set seed so that selection of training/testing data is consistent between runs
 # of the code chunk
@@ -338,29 +334,15 @@ set.seed(20201020)
 # Split into training and testing data
 split <- initial_split(data = asec_models_2019_2020, prop = 0.8)
 
-asec2019_2020_train <- training(split)
-asec2019_2020_test <- testing(split)
-
-# Reapply ASEC weights and save as tibble
-asec_train_weighted <- asec2019_2020_train %>%
-  as_survey_design(weights = asecwtcvd)
-#asec_train <- as_tibble(asec_train_weighted)
-asec_test_weighted <- asec2019_2020_test %>%
-  as_survey_design(weights = asecwtcvd)
-#asec_test <- as_tibble(asec_test_weighted)
+asec_train <- training(split)
+asec_test <- testing(split)
 
 # Set up 10 v-folds
 folds <- vfold_cv(data = asec_train, v = 10)
 
-# Convert back to survey object
-asec2019_2020_train <- asec2019_2020_train %>%
-  as_survey_design(weights = asecwtcvd)
-asec2019_2020_test <- asec2019_2020_test %>%
-  as_survey_design(weights = asecwtcvd)
-
 # Create recipe
 asec_rec <- 
-  recipe(employed ~ ., data = asec_train_weighted) %>%
+  recipe(employed ~ ., data = asec_train) %>%
   #update_role(serial, cpsid, cpsidp, new_role = "ID") %>%
   step_dummy(all_nominal_predictors()) %>% # dummy encode categorical predictors 
   step_center(all_predictors()) %>% # center predictors
@@ -456,49 +438,6 @@ logistic_last_fit <- logistic_last_workflow %>%
   extract_fit_parsnip() %>%
   vi(lambda = logistic_best$penalty)
   vip(num_features = 20) #looking at feature importance
-
-# -------------------------Model 3: KNN-----------------------------------------
-# Build the model (hyperparameter tuning for no. of neighbors and weight function)
-knn_mod <- nearest_neighbor(neighbors = tune()) %>% 
-    set_engine("kknn") %>% 
-    set_mode("classification")
-
-# Create a workflow
-knn_workflow <- workflow() %>% 
-    add_model(knn_mod) %>% 
-    add_recipe(asec_rec)
-
-# Define parameters to hypertune
-#knn_param <- 
- # knn_workflow %>% 
-  #hardhat::extract_parameter_set_dials() %>% 
-  #update(
-   # `long df` = spline_degree(c(2, 18)), 
-    #`lat df` = spline_degree(c(2, 18)),
-    #neighbors = neighbors(c(3, 50)),
-    #weight_func = weight_func(values = c("rectangular", "inv", "gaussian", "triangular", "optimal"))
-  #)
-
-# MARLYN: Error in neighbors(range = c(1, 15)) : unused argument (range = c(1, 15))?
-knn_grid <- grid_regular(neighbors(range = c(5, 21)), levels = 9)
-
-# Execute hyperparameter tuning using the set parameters and the cross_validation folds
-knn_cv <- knn_workflow %>% 
-  tune_grid(resamples = folds, #maybe tune_bayesian?
-            grid = knn_grid,
-            control = control_grid(save_pred = TRUE),
-            metrics = metric_set(rmse, roc_auc))
-
-# Calculate RMSE and MAE for each fold 
-collect_metrics(knn_cv, summarize = FALSE) 
-
-# Select best model based on rmse (MARLYN note: we can choose to do it based on best roc_auc?)
-knn_best <- knn_cv %>%
-  select_best(metric = "roc_auc")
-
-# Finalize workflow with best model
-knn_last_workflow <- knn_workflow %>%
-  finalize_workflow(parameters = knn_best)
 
 # -------------Running the best model specification on the 2021 data------------
 
