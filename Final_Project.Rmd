@@ -25,6 +25,7 @@ library(patchwork)
 library(sjlabelled)
 library(srvyr)
 library(tidyverse)
+
 ```
 
 How to customize .Rmd:
@@ -322,7 +323,7 @@ asec_2019_2020 <- cps_svy %>%
 ```
 
 ```{r prep-data-pca-modeling}
-# ------------------------------------Creating dataframe for step_pca------------------------------------
+# ------------------------------------Creating data frame for step_pca------------------------------------
 
 # Kept yrimmig and strechlk with 0 variable for NIU
 # Recoded NIU values for wksunem1 (99) and wksunem2  (9) to zero
@@ -334,7 +335,7 @@ asec_pca_2019_2020 <- asec_2019_2020 %>%
   select(-empstat, -labforce, -asecwtcvd) %>% # deselect variables that are unuseful (labforce) or redundant with employed variable
   mutate_at(vars(race, unitsstr, citizen, hispan,
             occ, ind, educ, classwly,
-            strechlk, spmmort, health, paidgh, whymove, statefip), list(~ as.factor(.)))
+            strechlk, spmmort, health, paidgh, whymove, statefip, employed), list(~ as.factor(.)))
 
 asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
   step_dummy(race, unitsstr, citizen, hispan,
@@ -689,15 +690,7 @@ predict(logistic_last_fit, asec_pca_train) %>%
 
 ``` {r best-mode-on-2021-data}
 # Prepare our implementation data
-asec2021 <- cps_svy %>%
-  filter(year == 2021) %>%
-  select(-employed)
-
-```
-
-``` {r run-model-immigrant-data}
-# Create data frame only of immigrants
-asec_model_imm <- asec2021_imm %>%
+asec2021_models <- as_tibble(asec2021) %>%
   filter(!is.na(employed)) %>%
   mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
   select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include as predictors
@@ -705,10 +698,70 @@ asec_model_imm <- asec2021_imm %>%
   select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
   mutate_at(vars(race, unitsstr, citizen, hispan,
                  occ, ind, educ, classwly,
-                 strechlk, spmmort, whymove, health, paidgh, statefip), list(~ as.factor(.)))
+                 strechlk, spmmort, whymove, health, paidgh, statefip, employed), list(~ as.factor(.)))
 
-predict(rf_last_fit, asec_model_imm)
+# Apply model to 2021 data
+rf_predictions_2021 <- bind_cols(asec2021_models, 
+                            predict(object = rf_last_fit, new_data = asec2021_models),
+                            predict(object = rf_last_fit, new_data = asec2021_models, type = "prob"))
 
-# ADD THIS AS A COLUMN; CALCULATE RMSE
+# Assess its performance
+conf_mat(data = rf_predictions_2021,
+         truth = employed,
+         estimate = .pred_class)
+
+# How often the model is correct (overall)
+accuracy(data = rf_predictions_2021,
+         truth = employed,
+         estimate = .pred_class)
+
+# How often the model is correct when a person is actually unemployed
+spec(data = rf_predictions_2021,
+     truth = employed,
+     estimate = .pred_class)
+
+# Our ROC_AUC metric, which also serves as our out-of-sample error rate
+roc_auc(data = rf_predictions_2021,
+        truth = employed,
+        estimate = .pred_0)
+
+```
+
+``` {r run-model-immigrant-data}
+# Create data frame only of immigrants
+asec_model_imm <- as_tibble(asec2021_imm) %>%
+  filter(!is.na(employed)) %>%
+  mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
+  select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include as predictors
+  select(-region, -county, -metro, -metarea, -metfips) %>% # deselect most location variables other than county
+  select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
+  mutate_at(vars(race, unitsstr, citizen, hispan,
+                 occ, ind, educ, classwly,
+                 strechlk, spmmort, whymove, health, paidgh, statefip, employed), list(~ as.factor(.)))
+
+# Apply model to 2021 data
+rf_predictions_imm <- bind_cols(asec_model_imm, 
+                                 predict(object = rf_last_fit, new_data = asec_model_imm),
+                                 predict(object = rf_last_fit, new_data = asec_model_imm, type = "prob"))
+
+# Assess its performance
+conf_mat(data = rf_predictions_imm,
+         truth = employed,
+         estimate = .pred_class)
+
+# How often the model is correct (overall)
+accuracy(data = rf_predictions_imm,
+         truth = employed,
+         estimate = .pred_class)
+
+# How often the model is correct when a person is actually unemployed
+spec(data = rf_predictions_imm,
+     truth = employed,
+     estimate = .pred_class)
+
+# Our ROC_AUC metric, which also serves as our out-of-sample error rate
+roc_auc(data = rf_predictions_imm,
+        truth = employed,
+        estimate = .pred_0)
 
 ```
