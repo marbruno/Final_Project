@@ -15,16 +15,18 @@ asec_2019_2020 <- cps_svy %>%
 
 # ------------------------------------PCA------------------------------------
 
-# IMPUTATION: impute ind and oct?
+# yrimmig, wksunem1, wksunem2, strechlk still TBD -- have removed from any processing but will need to add back in
+# missing column creation: occ, ind, classwly, whymove, paidgh [already done, NEED TO SCALE INDICATORS by sqrt(n)]
+# SYLVIA: MAKE DUMMY FOR STATEFIP (and weight it)
+
 # Select numeric variables from data set
 asec_pca_2019_2020 <- asec_2019_2020 %>%
   select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include in PCA analysis
   select(-region, -county, -metro, -metarea, -metfips) %>% # deselect all location variables other than state
-  select(-yrimmig, -wksunem1, wksunem2, -whymove) %>% # deselect variables that many people have not responded to resulting in many NAs; also excluded from PCA
   select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
   mutate_at(vars(race, unitsstr, citizen, hispan,
             occ, ind, educ, classwly,
-            strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
+            strechlk, spmmort, health, paidgh, whymove, statefip), list(~ as.factor(.)))
 
 
 # AARON: can we include values that were not ansewrd by everyone in the PCA and
@@ -32,7 +34,7 @@ asec_pca_2019_2020 <- asec_2019_2020 %>%
 asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
   step_dummy(race, unitsstr, citizen, hispan,
              occ, ind, educ, classwly,
-             strechlk, spmmort, whymove, health, paidgh, one_hot = TRUE) %>%
+             strechlk, spmmort, whymove, health, paidgh, statefip) %>%
   prep() %>%
   bake(asec_pca_2019_2020)
 # Note: did not include in step_dummy: hhincome, age, yrimmig, existing indicator variables (sex,
@@ -40,14 +42,16 @@ asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
 # mrkscovnw, inhcovnw, schipnw), wksunem1, wksunem2, ftotval, inctto, incwelfr, 
 # incunemp, ctccrd, eitcred, moop, hipval
 # QUESTION FOR AARON: should we use one-hot encoding for PCA instead of step_dummy?
+# NO, IT DOESN'T MATTER, DON'T INCLUDE
 
+# SYLVIA: MAKE SURE THAT THIS FIRST MUTATE_AT IS ALL VARIABLES W2 CATEGORIES
 asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
   mutate_at(
     vars(
       offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw,
-      mrkscovnw, inhcovnw, mrkucovnw, sex, starts_with("strechlk"), starts_with("spmmort")
+      mrkscovnw, inhcovnw, mrkucovnw, sex, starts_with("spmmort")
     ),
-    list( ~ case_when(. == 1 ~ 1/sqrt(3),
+    list( ~ case_when(. == 1 ~ (1/sqrt(2)),
                       . == 0 ~ 0,
                       TRUE ~ NA_real_))
   ) %>%
@@ -101,6 +105,14 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
   ) %>%
   mutate_at(
     vars(
+      starts_with("state")
+    ),
+    list( ~ case_when(. == 1 ~ 1/sqrt(50),
+                      . == 0 ~ 0,
+                      TRUE ~ NA_real_)) 
+    ) %>%
+  mutate_at(
+    vars(
       starts_with("ind")
     ),
     list( ~ case_when(. == 1 ~ 1/sqrt(279),
@@ -116,7 +128,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
                       TRUE ~ NA_real_))
   )
 
-asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
+asec_pca_2019_2020_weighted <- asec_pca_2019_2020 %>%
   as_survey_design(weights = asecwtcvd)
 
 # conduct PCA on the asec_pca_2019_2020 data
@@ -124,6 +136,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
   # MARLYN/AARON: this won't run without having imputed values where the NAs are
 
 # AARON: WAY TO DO THIS MORE ELEGANTLY?
+# USE ~. 
 asec_pca <-
   svyprcomp(
     ~ county + hhincome + asecwtcvd + age + sex +
@@ -293,7 +306,7 @@ asec_pca <-
       classwly_X27 + classwly_X28 + classwly_X29 + strechlk_X1 + strechlk_X3 + strechlk_X4 +
       spmmort_X2 + + spmmort_X1 +
       spmmort_X3 + health_X1 + health_X2 +
-      health_X3 + health_X4 + health_X5 + paidgh_X10 + paidgh_X21 + paidgh_X22, design = asec_pca_2019_2020, scale. = FALSE, scores = TRUE)
+      health_X3 + health_X4 + health_X5 + paidgh_X10 + paidgh_X21 + paidgh_X22, design = asec_pca_2019_2020_weighted, scale. = FALSE, scores = TRUE)
 
 # obtain summary metrics
 summary(asec_pca)
@@ -325,7 +338,8 @@ asec_models_2019_2020 <- asec_2019_2020 %>%
   select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
   mutate_at(vars(race, unitsstr, citizen, hispan,
                  occ, ind, educ, classwly,
-                 strechlk, spmmort, whymove, health, paidgh), list(~ as.factor(.)))
+                 strechlk, spmmort, whymove, health, paidgh, statefip), list(~ as.factor(.)))
+
 
 # Set seed so that selection of training/testing data is consistent between runs
 # of the code chunk
@@ -334,26 +348,36 @@ set.seed(20201020)
 # Split into training and testing data
 split <- initial_split(data = asec_models_2019_2020, prop = 0.8)
 
-asec_train <- training(split)
-asec_test <- testing(split)
+asec_train <- remove_val_labels(training(split))
+asec_test <- remove_val_labels(testing(split))
+
+# Reapply ASEC weights and save as tibble
+asec_train_weighted <- asec2019_2020_train %>%
+  as_survey_design(weights = asecwtcvd)
+#asec_train <- as_tibble(asec_train_weighted)
+asec_test_weighted <- asec2019_2020_test %>%
+  as_survey_design(weights = asecwtcvd)
+#asec_test <- as_tibble(asec_test_weighted)
 
 # Set up 10 v-folds
 folds <- vfold_cv(data = asec_train, v = 10)
 
 # Create recipe
-asec_rec <- 
+asec_rec <-
   recipe(employed ~ ., data = asec_train) %>%
-  #update_role(serial, cpsid, cpsidp, new_role = "ID") %>%
-  step_dummy(all_nominal_predictors()) %>% # dummy encode categorical predictors 
+  step_dummy(race, unitsstr, citizen, hispan,
+             occ, ind, educ, classwly,
+             strechlk, spmmort, whymove, health, paidgh, statefip) %>%
   step_center(all_predictors()) %>% # center predictors
   step_scale(all_predictors()) %>% # scale predictors
   step_nzv(all_predictors()) %>%   # drop near zero variance predictors
-  themis::step_downsample(employed) # subsampling due to class imbalances between employment class 
+  themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class 
+  step_other() 
 
 # -------------------------Model 1: Random forest-------------------------------
 
 # Build a random forest model (hyperparametr tuning for no. of trees and predictors sampled at each split)
-rf_mod <- rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>%
+rf_mod <- rand_forest(mtry = tune(), min_n = tune(), trees = 500) %>%
   set_engine("ranger", importance = "impurity") %>%
   set_mode("classification")
 
@@ -365,7 +389,7 @@ rf_workflow <-
 
 # Create a grid of the parameters we're tuning for
 rf_grid <- grid_regular(
-  mtry(range = c(10, 50)), #MARLYN: I don't think we even have 50 predictors?
+  mtry(range = c(10, 20)), #MARLYN: I don't think we even have 50 predictors?
   min_n(range = c(2, 8)),
   levels = 5)
 
@@ -437,7 +461,9 @@ logistic_last_fit <- logistic_last_workflow %>%
   last_fit(data = asec2019_2020_train) %>% 
   extract_fit_parsnip() %>%
   vi(lambda = logistic_best$penalty)
-  vip(num_features = 20) #looking at feature importance
+
+vip(num_features = 20) #looking at feature importance
+
 
 # -------------Running the best model specification on the 2021 data------------
 
