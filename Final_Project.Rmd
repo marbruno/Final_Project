@@ -98,18 +98,18 @@ cps_svy <- data %>%
     eitcred == 9999 ~ NA_real_,
     TRUE ~ as.numeric(eitcred)
   )) %>%
-  mutate(offpov = case_when(
-    offpov == 99 ~ NA_real_,
-    TRUE ~ as.numeric(offpov)
-  )) %>%
-  mutate(anycovly = case_when(
-    anycovly == 99 ~ NA_real_,
-    TRUE ~ as.numeric(anycovly)
-  )) %>%
   mutate(immigrant = case_when(
     citizen == 1 ~ 1,
     citizen >= 2 & citizen <= 5 ~ 0,
     TRUE ~ NA_real_
+  )) %>%
+    mutate(wksunem1 = case_when(
+    wksunem1 == 99 ~ 0,
+    TRUE ~ as.numeric(wksunem1)
+  )) %>%
+    mutate(wksunem2 = case_when(
+    wksunem2 == 9 ~ 0,
+    TRUE ~ as.numeric(wksunem2)
   )) %>%
   select(-starts_with("q"), -asecwt, -month, -asecflag, -statecensus, -asecwth, -pernum, -cpsidp) # Drop quality flags and variables we don't need
   # NOTE: the 'immigrant' variable is 1 for people born in the U.S.; 0 for people born in the U.S. outlying territories (PR, Guam), people born abroad of American parents, naturalized citizens, and non-citizens; and NA for people marked as NIU.
