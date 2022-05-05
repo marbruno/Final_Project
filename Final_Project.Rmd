@@ -1,7 +1,7 @@
 ---
 title: "Final_Project"
 author: "Sylvia Brown, Pierina Forastieri, Julia Buschmann, Marlyn Bruno"
-date: "2022-04-20"
+date: "2022-05-06"
 output: html_document
 ---
 
@@ -326,7 +326,7 @@ a %>%
   geom_line() +
   geom_point(size = 1) +
    labs(
-    title = "Unemployment Rate Rose in the US",
+    title = "Unemployment Rate Rose in the US During the Pandemic",
     caption = "Source: IPUMS Data",
     x = "",
     y = "Unemployment Rate",
