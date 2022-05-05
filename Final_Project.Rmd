@@ -317,21 +317,26 @@ a <- asec_allyears %>%
   #filter(year ==2019 | year == 2020) %>% #Including 2021 so we can visualize how unemployment rose for both immigrants and nonimmigrants
   select(year, employed, immigrant) %>%
   group_by(year, immigrant) %>%
+  mutate(immigrant = as.factor(immigrant)) %>%
   summarize(count = n(),
             pct_unemployed = (1-mean(employed))) 
 
 a %>%
   #group_by(year,immigrant)%>%
-  ggplot(aes(x= year, y= pct_unemployed, group = immigrant, color = immigrant)) +
-  geom_line() +
+  ggplot(aes(x= year, y= pct_unemployed)) +
+  geom_line(aes(color = immigrant, group = immigrant)) +
   geom_point(size = 1) +
    labs(
     title = "Unemployment Rate Rose in the US During the Pandemic",
     caption = "Source: IPUMS Data",
     x = "",
     y = "Unemployment Rate",
+    color = "Immigrant Status"
   ) +
   scale_y_continuous(labels = scales::percent, limits = c(0,.10)) +
+  scale_x_continuous(breaks = seq(2019, 2021, 1), 
+                     limits=c(2019, 2021)) +
+  scale_color_discrete(labels = c("Nonimmigrant", "Immigrant")) +
   theme_minimal()
 
 
