@@ -380,3 +380,17 @@ asec2021 <- cps_svy %>%
 
 
 # -------------------------Run model on immigrant data--------------------------
+# Create data frame only of immigrants
+asec_model_imm <- asec2021_imm %>%
+  filter(!is.na(employed)) %>%
+  mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
+  select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include as predictors
+  select(-region, -county, -metro, -metarea, -metfips) %>% # deselect most location variables other than county
+  select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
+  mutate_at(vars(race, unitsstr, citizen, hispan,
+                 occ, ind, educ, classwly,
+                 strechlk, spmmort, whymove, health, paidgh, statefip), list(~ as.factor(.)))
+
+predict(rf_last_fit, asec_model_imm)
+
+# ADD THIS AS A COLUMN; CALCULATE RMSE
