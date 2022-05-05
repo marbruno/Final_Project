@@ -311,11 +311,29 @@ a <- asec_allyears %>%
   summarise(cnt = n()) %>%
   filter(employed == 0)
 
-# PIERINA: CAN YOU FIX THIS SO THAT IT LOOKS LIKE THE VERSION THAT WORKS? I COULDN'T FIGURE OUT
-# HOW TO REPLICATE....
+# percentage change of unemployed people by immigrant status
+a <- asec_allyears %>%
+  filter(!is.na(employed))%>%
+  #filter(year ==2019 | year == 2020) %>% #Including 2021 so we can visualize how unemployment rose for both immigrants and nonimmigrants
+  select(year, employed, immigrant) %>%
+  group_by(year, immigrant) %>%
+  summarize(count = n(),
+            pct_unemployed = (1-mean(employed))) 
+
 a %>%
-  mutate(pct_change = round((a$cnt/lag(a$cnt) - 1) * 100, 2))
-  # why I get NA if round((a$cnt/lag(a$cnt) - 1) * 100, 2) works. being a the table before mutate
+  #group_by(year,immigrant)%>%
+  ggplot(aes(x= year, y= pct_unemployed, group = immigrant, color = immigrant)) +
+  geom_line() +
+  geom_point(size = 1) +
+   labs(
+    title = "Unemployment Rate Rose in the US During the Pandemic",
+    caption = "Source: IPUMS Data",
+    x = "",
+    y = "Unemployment Rate",
+  ) +
+  scale_y_continuous(labels = scales::percent, limits = c(0,.10)) +
+  theme_minimal()
+
 
 ```
 

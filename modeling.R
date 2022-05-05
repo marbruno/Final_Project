@@ -236,7 +236,7 @@ bake(prep(asec_pca_rec, training = asec_pca_train), new_data = asec_pca_train)
 # -------------------------Model 1: Random forest-------------------------------
 
 # Build a random forest model (hyperparameter tuning for no. of trees and predictors sampled at each split)
-rf_mod <- rand_forest(mtry = 10, min_n = tune(), trees = 0) %>%
+rf_mod <- rand_forest(mtry = 10, min_n = tune(), trees = 100) %>%
   set_engine("ranger", importance = "impurity") %>%
   set_mode("classification")
 
@@ -249,13 +249,35 @@ rf_workflow <-
 # Create a grid of the parameters we're tuning for
 rf_grid <- grid_regular(
   min_n(range = c(2, 8)),
-  levels = 3)
+  levels = 4)
 
 # Execute hyperparameter tuning using the grid and the cross_validation folds
 rf_cv <- tune_grid(rf_workflow,
                    resamples = folds,
                    grid = rf_grid,
                    metrics = metric_set(roc_auc))
+
+# # Build a random forest that will incorporate principal components as predictors
+# rf_mod_pca <- rand_forest(mtry = 10, min_n = tune(), trees = 100) %>%
+#   set_engine("ranger", importance = "impurity") %>%
+#   set_mode("classification")
+# 
+# # Create a workflow
+# rf_workflow_pca <- 
+#   workflow() %>% 
+#   add_model(rf_mod_pca) %>% 
+#   add_recipe(asec_pca_rec)
+# 
+# # Create a grid of the parameters we're tuning for
+# rf_grid_pca <- grid_regular(
+#   min_n(range = c(2, 8)),
+#   levels = 4)
+# 
+# # Execute hyperparameter tuning using the grid and the cross_validation folds
+# rf_cv_pca <- tune_grid(rf_workflow_pca,
+#                    resamples = folds_pca,
+#                    grid = rf_grid_pca,
+#                    metrics = metric_set(roc_auc))
 
 #Calculate ROC_AUC and accuracy for each fold 
 collect_metrics(rf_cv, summarize = TRUE) %>%
@@ -265,19 +287,52 @@ collect_metrics(rf_cv, summarize = TRUE) %>%
 rf_best <- rf_cv %>%
   select_best(metric = "roc_auc")
 
-# Finalize workflow with best model
-rf_last_workflow <- rf_workflow %>%
-  finalize_workflow(parameters = rf_best)
+# Finalize model
+rf_final_model <- finalize_model(rf_mod, rf_best)
+
+# Look at (plot) feature importance
+library(vip)
+rf_final_model %>%
+  set_engine("ranger", importance = "permutation") %>%
+  fit(employed ~ ., data = asec_train) %>%
+  vip(geom = "point")
+
+# # Finalize workflow with best model (1st way)
+# rf_last_workflow <- rf_workflow %>%
+#   finalize_workflow(parameters = rf_best)
+
+# Finalize workflow (2nd way)
+rf_last_workflow <- workflow() %>%
+  add_recipe(rf_rec) %>%
+  add_model(rf_final_model)
 
 # Fit to the all training data
 set.seed(20220429) #MARLYN: is it best practice to set a seed before last fit?
 rf_last_fit <- rf_last_workflow %>%
-  last_fit(split = asec2019_2020_train)
+  last_fit(split = split, metrics = metric_set(roc_auc))
 
 # Look at feature importance
 rf_last_fit %>%
   extract_fit_parsnip() %>%
   vip(num_features = 20)
+# ------------------Train model on all training data --------------------------
+# THIS ALSO DIDN'T WORK
+# # the last model
+# last_rf_mod <- 
+#   rand_forest(mtry = 10, min_n = 2, trees = 100) %>% 
+#   set_engine("ranger", importance = "impurity") %>% 
+#   set_mode("classification")
+# 
+# # the last workflow
+# last_rf_workflow <- 
+#   rf_workflow %>% 
+#   update_model(last_rf_mod)
+# 
+# # the last fit
+# set.seed(345)
+# last_rf_fit <- 
+#   last_rf_workflow %>% 
+#   last_fit(split)
 
 
 # -------------------------Model 2: Logistic Regression (PCA)------------------------------
@@ -311,6 +366,7 @@ logistic_last_pca_workflow <- logistic_pca_workflow %>%
 
 # Fit to the all training data and check feature importance
 set.seed(20220428) #MARLYN: is it best practice to set a seed before last fit?
+
 logistic_last_fit <- logistic_last_pca_workflow %>%
   fit(data = asec_pca_train)
 
