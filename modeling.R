@@ -16,13 +16,13 @@ asec_2019_2020 <- cps_svy %>%
 # ------------------------------------Creating dataframe for step_pca------------------------------------
 
 # Kept yrimmig and strechlk with 0 variable for NIU
-# Recoded NIU values for wksunem1 (99) and wksunem2 and (9) to zero
+# Recoded NIU values for wksunem1 (99) and wksunem2  (9) to zero
 
 # Select relevant variables from data set
 asec_pca_2019_2020 <- asec_2019_2020 %>%
   select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include in PCA analysis
   select(-region, -county, -metro, -metarea, -metfips) %>% # deselect all location variables other than state
-  select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
+  select(-empstat, -labforce, -asecwtcvd) %>% # deselect variables that are unuseful (labforce) or redundant with employed variable
   mutate_at(vars(race, unitsstr, citizen, hispan,
             occ, ind, educ, classwly,
             strechlk, spmmort, health, paidgh, whymove, statefip), list(~ as.factor(.)))
@@ -147,7 +147,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
 
 # asec_pca_2019_2020 can be run by the models and apply PCA to them (using step_pca)
 
-# ---------------------------------Model prep---------------------------------
+# ---------------------------------Model prep: non-PCA---------------------------------
 
 # Preparing data for models
 asec_models_2019_2020 <- asec_2019_2020 %>%
@@ -172,14 +172,6 @@ split <- initial_split(data = asec_models_2019_2020, prop = 0.8)
 asec_train <- remove_val_labels(training(split))
 asec_test <- remove_val_labels(testing(split))
 
-# Reapply ASEC weights and save as tibble
-asec_train_weighted <- asec2019_2020_train %>%
-  as_survey_design(weights = asecwtcvd)
-#asec_train <- as_tibble(asec_train_weighted)
-asec_test_weighted <- asec2019_2020_test %>%
-  as_survey_design(weights = asecwtcvd)
-#asec_test <- as_tibble(asec_test_weighted)
-
 # Set up 10 v-folds
 folds <- vfold_cv(data = asec_train, v = 10)
 
@@ -195,10 +187,56 @@ asec_rec <-
   themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class 
   step_other() 
 
+# Create rf recipe
+rf_rec <-
+  recipe(employed ~ ., data = asec_train) %>%
+  step_dummy(race, unitsstr, citizen, hispan, educ, 
+             classwly, strechlk, spmmort, whymove, 
+             health, paidgh, statefip) %>% #Dummy select categorical variables
+  step_center(all_numeric_predictors()) %>% # center predictors
+  step_scale(all_numeric_predictors()) %>% # scale predictors
+  step_nzv(all_numeric_predictors()) %>%   # drop near zero variance predictors
+  themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class 
+  step_other() #%>%
+# prep() %>%
+# bake(asec_train)
+
+
+# ---------------------------------Model prep: PCA---------------------------------
+
+# Preparing data for models
+#USE asec_pca_2019_2020
+
+# Set seed so that selection of training/testing data is consistent between runs
+# of the code chunk
+set.seed(20201020)
+
+# Split into training and testing data
+split <- initial_split(data = asec_pca_2019_2020, prop = 0.8)
+
+asec_pca_train <- remove_val_labels(training(split))
+asec_pca_test <- remove_val_labels(testing(split))
+
+# Set up 10 v-folds
+folds_pca <- vfold_cv(data = asec_pca_train, v = 10)
+
+# Create recipe
+asec_pca_rec <-
+  recipe(employed ~ ., data = asec_pca_train) %>%
+  step_center(all_numeric_predictors()) %>% # center predictors
+  step_scale(all_numeric_predictors()) %>% # scale predictors
+  step_nzv(all_numeric_predictors()) %>%   # drop near zero variance predictors
+  step_pca(all_numeric(), num_comp = 20) %>%
+  themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class 
+  step_other() 
+
+# See the engineered training data
+bake(prep(asec_pca_rec, training = asec_pca_train), new_data = asec_pca_train)
+
 # -------------------------Model 1: Random forest-------------------------------
 
-# Build a random forest model (hyperparametr tuning for no. of trees and predictors sampled at each split)
-rf_mod <- rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>%
+# Build a random forest model (hyperparameter tuning for no. of trees and predictors sampled at each split)
+rf_mod <- rand_forest(mtry = 10, min_n = tune(), trees = 0) %>%
   set_engine("ranger", importance = "impurity") %>%
   set_mode("classification")
 
@@ -206,23 +244,22 @@ rf_mod <- rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>%
 rf_workflow <- 
   workflow() %>% 
   add_model(rf_mod) %>% 
-  add_recipe(asec_rec)
+  add_recipe(rf_rec)
 
 # Create a grid of the parameters we're tuning for
 rf_grid <- grid_regular(
-  mtry(range = c(10, 50)), #MARLYN: I don't think we even have 50 predictors?
   min_n(range = c(2, 8)),
-  levels = 5)
+  levels = 3)
 
 # Execute hyperparameter tuning using the grid and the cross_validation folds
-rf_cv <- rf_workflow %>% 
-  tune_grid(rf_workflow,
-            resamples = folds,
-            grid = rf_grid,
-            metrics = metric_set(roc_auc, accuracy))
+rf_cv <- tune_grid(rf_workflow,
+                   resamples = folds,
+                   grid = rf_grid,
+                   metrics = metric_set(roc_auc))
 
-#Calculate RMSE and MAE for each fold 
-collect_metrics(rf_cv, summarize = FALSE) 
+#Calculate ROC_AUC and accuracy for each fold 
+collect_metrics(rf_cv, summarize = TRUE) %>%
+  filter(.metric == "roc_auc")
 
 # Select best model based on rmse (MARLYN note: we can choose to do it based on best roc_auc?)
 rf_best <- rf_cv %>%
@@ -242,48 +279,42 @@ rf_last_fit %>%
   extract_fit_parsnip() %>%
   vip(num_features = 20)
 
-# -------------------------Model 2: Logistic Regression------------------------------
+
+# -------------------------Model 2: Logistic Regression (PCA)------------------------------
 
 # Model 2: Logistic regression 
 
-# Build the model (hyperparameter tuning for penalty)
-logistic_mod <- logistic_reg(penalty = tune(), mixture = 1) %>% 
+# Build the model
+logistic_pca_mod <- logistic_reg(penalty = 1) %>% 
   set_engine("glmnet")
 
 # Create a workflow
-logistic_workflow <- 
+logistic_pca_workflow <- 
   workflow() %>% 
-  add_model(logistic_mod) %>% 
-  add_recipe(asec_rec)
+  add_model(logistic_pca_mod) %>% 
+  add_recipe(asec_pca_rec)
 
-# Create a grid of penalty values to tune
-logistic_grid <- grid_regular(penalty(), levels = 10)
-
-# Execute hyperparameter tuning using the grid and the cross_validation folds
-logistic_cv <- logistic_workflow %>% 
-  tune_grid(resamples = folds,
-            grid = logistic_grid,
-            metrics = metric_set(roc_auc, accuracy))
+# Fit to folds
+logistic_pca_cv <- logistic_pca_workflow %>% 
+  fit_resamples(resamples = folds_pca)
 
 # Calculate RMSE and MAE for each fold 
-collect_metrics(logistic_cv, summarize = FALSE) 
+collect_metrics(logistic_pca_cv, summarize = FALSE) 
 
 # Select best model based on rmse (MARLYN note: we can choose to do it based on best roc_auc?)
-logistic_best <- logistic_cv %>%
+logistic_pca_best <- logistic_pca_cv %>%
   select_best(metric = "roc_auc")
 
 # Finalize workflow with best model
-logistic_last_workflow <- logistic_workflow %>%
-  finalize_workflow(parameters = logistic_best)
+logistic_last_pca_workflow <- logistic_pca_workflow %>%
+  finalize_workflow(parameters = logistic_pca_best)
 
 # Fit to the all training data and check feature importance
 set.seed(20220428) #MARLYN: is it best practice to set a seed before last fit?
-logistic_last_fit <- logistic_last_workflow %>%
-  last_fit(data = asec2019_2020_train) %>% 
-  extract_fit_parsnip() %>%
-  vi(lambda = logistic_best$penalty)
-vip(num_features = 20) #looking at feature importance
+logistic_last_fit <- logistic_last_pca_workflow %>%
+  fit(data = asec_pca_train)
 
+predict(logistic_last_fit, asec_pca_train) %>% group_by(.pred_class) %>% summarize(n = n())
 
 # -------------Running the best model specification on the 2021 data------------
 
