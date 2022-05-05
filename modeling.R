@@ -315,6 +315,7 @@ rf_last_fit <- rf_last_workflow %>%
 rf_last_fit %>%
   extract_fit_parsnip() %>%
   vip(num_features = 20)
+
 # ------------------Train model on all training data --------------------------
 # THIS ALSO DIDN'T WORK
 # # the last model
@@ -377,3 +378,17 @@ predict(logistic_last_fit, asec_pca_train) %>% group_by(.pred_class) %>% summari
 
 
 # -------------------------Run model on immigrant data--------------------------
+# Create data frame only of immigrants
+asec_model_imm <- asec2021_imm %>%
+  filter(!is.na(employed)) %>%
+  mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
+  select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include as predictors
+  select(-region, -county, -metro, -metarea, -metfips) %>% # deselect most location variables other than county
+  select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
+  mutate_at(vars(race, unitsstr, citizen, hispan,
+                 occ, ind, educ, classwly,
+                 strechlk, spmmort, whymove, health, paidgh, statefip), list(~ as.factor(.)))
+
+predict(rf_last_fit, asec_model_imm)
+
+# ADD THIS AS A COLUMN; CALCULATE RMSE

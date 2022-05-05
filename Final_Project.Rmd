@@ -29,7 +29,7 @@ data <- read_ipums_micro(ddi) %>%
   janitor::clean_names()
 
 cps_svy <- data %>%
-  filter(empstat != 1) %>% #filter out people in armed forces
+  filter(empstat != 1) %>% #filter  out people in armed forces
   filter(age >= 18 & age < 66) %>% #filter out minors; leave only adults
   mutate(employed = case_when(
     empstat == 10 | empstat == 12 ~ 1,
