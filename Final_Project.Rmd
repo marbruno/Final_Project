@@ -246,7 +246,6 @@ unemployed_graph <- asec_allyears %>%
 
 employed_graph + unemployed_graph
 
-
 # dumbbell % unemployed by state between 2019 and 2020
 status_bystate <- asec_allyears %>%
   drop_na(employed) %>%
@@ -276,35 +275,6 @@ status_bystate %>%
   ) +
   theme_minimal()
 
-# percentage point change of unemployed people by immigrant status
-a <- asec_allyears %>%
-  filter(!is.na(employed))%>%
-  #filter(year ==2019 | year == 2020) %>% #Including 2021 so we can visualize how unemployment rose for both immigrants and nonimmigrants
-  select(year, employed, immigrant) %>%
-  group_by(year, immigrant) %>%
-  mutate(immigrant = as.factor(immigrant)) %>%
-  summarize(count = n(),
-            pct_unemployed = (1-mean(employed))) 
-
-a %>%
-  #group_by(year,immigrant)%>%
-  ggplot(aes(x= year, y= pct_unemployed)) +
-  geom_line(aes(color = immigrant, group = immigrant)) +
-  geom_point(size = 1) +
-   labs(
-    title = "Unemployment Rate Rose in the US During the Pandemic",
-    caption = "Source: IPUMS Data",
-    x = "",
-    y = "Unemployment Rate",
-    color = "Immigrant Status"
-  ) +
-  scale_y_continuous(labels = scales::percent, limits = c(0,.10)) +
-  scale_x_continuous(breaks = seq(2019, 2021, 1), 
-                     limits=c(2019, 2021)) +
-  scale_color_discrete(labels = c("Nonimmigrant", "Immigrant")) +
-  theme_minimal()
-
-
 ```
 
 ```{r model-prep}
@@ -321,6 +291,8 @@ asec_2019_2020 <- cps_svy %>%
   filter(!is.na(employed))
 
 ```
+
+When conceptualizing the potential different models we could build to predict people's employment status, we were curious to see if principal components could be used as predictors. To avoid data leakage, it is necessary for the principal components to be constructed each time our model specifications run through new cross-validation folds. As such, principal component analysis needed to be part of our preprocessing, and we included it as the last step of our model recipe. Nevertheless, we had to construct a specific data set to use principal components as predictors since we needed to convert categorical variables into dummy variables without increasing their weight in the machine learning algorithms. 
 
 ```{r prep-data-pca-modeling}
 # ------------------------------------Creating data frame for step_pca------------------------------------
@@ -459,62 +431,9 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
 
 ```
 
-```{r model-prep-non-pca}
-# Preparing data for models
-asec_models_2019_2020 <- asec_2019_2020 %>%
-  filter(year == 2019 | year == 2020) %>%
-  filter(!is.na(employed)) %>%
-  mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
-  select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include as predictors
-  select(-region, -county, -metro, -metarea, -metfips) %>% # deselect most location variables other than county
-  select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
-  mutate_at(vars(race, unitsstr, citizen, hispan,
-                 occ, ind, educ, classwly,
-                 strechlk, spmmort, whymove, health, paidgh, statefip), list(~ as.factor(.)))
+We decided to first try using principal components as predictors in a logistic regression model. 
 
-
-# Set seed so that selection of training/testing data is consistent between runs
-# of the code chunk
-set.seed(20201020)
-
-# Split into training and testing data
-split <- initial_split(data = asec_models_2019_2020, prop = 0.8)
-
-asec_train <- remove_val_labels(training(split))
-asec_test <- remove_val_labels(testing(split))
-
-# Set up 10 v-folds
-folds <- vfold_cv(data = asec_train, v = 10)
-
-# Create recipe
-asec_rec <-
-  recipe(employed ~ ., data = asec_train) %>%
-  step_dummy(race, unitsstr, citizen, hispan,
-             occ, ind, educ, classwly,
-             strechlk, spmmort, whymove, health, paidgh, statefip) %>%
-  step_center(all_predictors()) %>% # center predictors
-  step_scale(all_predictors()) %>% # scale predictors
-  step_nzv(all_predictors()) %>%   # drop near zero variance predictors
-  themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class 
-  step_other() 
-
-# Create rf recipe
-rf_rec <-
-  recipe(employed ~ ., data = asec_train) %>%
-  step_dummy(race, unitsstr, citizen, hispan, educ, 
-             classwly, strechlk, spmmort, whymove, 
-             health, paidgh, statefip) %>% #Dummy select categorical variables
-  step_center(all_numeric_predictors()) %>% # center predictors
-  step_scale(all_numeric_predictors()) %>% # scale predictors
-  step_nzv(all_numeric_predictors()) %>%   # drop near zero variance predictors
-  themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class 
-  step_other() #%>%
-# prep() %>%
-# bake(asec_train)
-
-```
-
-``` {r model-prep-pca}
+``` {r Model 1}
 # Preparing data for models
 #USE asec_pca_2019_2020
 
@@ -544,9 +463,83 @@ asec_pca_rec <-
 # See the engineered training data
 bake(prep(asec_pca_rec, training = asec_pca_train), new_data = asec_pca_train)
 
+# Build the model
+logistic_pca_mod <- logistic_reg(penalty = 1) %>% 
+  set_engine("glmnet")
+
+# Create a workflow
+logistic_pca_workflow <- 
+  workflow() %>% 
+  add_model(logistic_pca_mod) %>% 
+  add_recipe(asec_pca_rec)
+
+# Fit to folds
+logistic_pca_cv <- logistic_pca_workflow %>% 
+  fit_resamples(resamples = folds_pca)
+
+# Calculate RMSE and MAE for each fold 
+collect_metrics(logistic_pca_cv, summarize = FALSE) 
+
+# Select best model based on roc_auc
+logistic_pca_best <- logistic_pca_cv %>%
+  select_best(metric = "roc_auc")
+
+# Finalize workflow with best model
+logistic_last_pca_workflow <- logistic_pca_workflow %>%
+  finalize_workflow(parameters = logistic_pca_best)
+
+# Fit to the all training data and check feature importance
+set.seed(20220428) #Setting seed because Marlyn worries about reproducibility 
+
+logistic_last_fit <- logistic_last_pca_workflow %>%
+  fit(data = asec_pca_train)
+
+predict(logistic_last_fit, asec_pca_train) %>% 
+  group_by(.pred_class) %>% 
+  summarize(n = n())
+
 ```
 
-``` {r model-random-forest}
+[TALK ABOUT HOW THE PCA-LM MODEL DID HERE]...We were not content with the performance of our final logistic regression model. We decided to next try a Random Forest algorithm. We wanted to tune for the minimum number of data points in a node that are required for a Random Forest node to be split further (min_n). While we also wanted to tune for number of predictors randomly sampled at each split within individual trees (mtry), we came to realize that it was a very computationally expensive process and limited tuning to only one hyperparameter. 
+
+```{r Model 2}
+# Preparing data for models
+asec_models_2019_2020 <- asec_2019_2020 %>%
+  filter(year == 2019 | year == 2020) %>%
+  filter(!is.na(employed)) %>%
+  mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
+  select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include as predictors
+  select(-region, -county, -metro, -metarea, -metfips) %>% # deselect most location variables other than county
+  select(-empstat, -labforce) %>% # deselect variables that are unuseful (labforce)
+  mutate_at(vars(race, unitsstr, citizen, hispan,
+                 occ, ind, educ, classwly,
+                 strechlk, spmmort, whymove, health, paidgh, statefip), list(~ as.factor(.)))
+
+# Set seed so that selection of training/testing data is consistent between runs
+# of the code chunk
+set.seed(20201020)
+
+# Split into training and testing data
+split <- initial_split(data = asec_models_2019_2020, prop = 0.8)
+
+asec_train <- remove_val_labels(training(split))
+asec_test <- remove_val_labels(testing(split))
+
+# Set up 10 v-folds
+folds <- vfold_cv(data = asec_train, v = 10)
+
+# Create rf recipe
+rf_rec <-
+  recipe(employed ~ ., data = asec_train) %>%
+  step_dummy(race, unitsstr, citizen, hispan, educ, 
+             classwly, strechlk, spmmort, whymove, 
+             health, paidgh, statefip) %>% #Dummy select categorical variables
+  step_center(all_numeric_predictors()) %>% # center predictors
+  step_scale(all_numeric_predictors()) %>% # scale predictors
+  step_nzv(all_numeric_predictors()) %>%   # drop near zero variance predictors
+  themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class 
+  step_other()
+
 # Build a random forest model (hyperparameter tuning for no. of trees and predictors sampled at each split)
 rf_mod <- rand_forest(mtry = 10, min_n = tune(), trees = 100) %>%
   set_engine("ranger", importance = "impurity") %>%
@@ -622,7 +615,10 @@ roc_auc(data = rf_predictions,
 
 ```
 
-We attempted to run the random forest with the principal components as predictors, but couldn't get it to run
+The area under the curve for our best RF model was 0.75, which is acceptable but not _superb_. We also are interested in the specificity of our model because policy practitioners looking to target unemployed folks for unemployment assistance or workforce opportunities are likely going to want to know how often our model is right when it predicts unemployment. Our model is correct 75% of the time it predicts unemployment. Ideally, we would want better precision so that we could be assured that any money spent on outreach would be well-invested.
+
+We also attempted to run the random forest with the principal components as predictors, but couldn't get it to run. [SYLIVA, delete this if you don't go ahead with PC-RF attempt]
+
 ```{r model-random-forest-pca}
 # # Build a random forest that will incorporate principal components as predictors
 # rf_mod_pca <- rand_forest(mtry = 10, min_n = tune(), trees = 100) %>%
@@ -648,49 +644,12 @@ We attempted to run the random forest with the principal components as predictor
 
 ```
 
-``` {r model-logistic-reg-pca}
-# Model 2: Logistic regression 
+Now equipped with the best model, we wanted to see if it would also make precise predictions for new data! We used 2021 IPUMS data that had been excluded from our training set. Essentially, we wanted to assess whether our model that was trained on 2019 and 2020 data could make as good predictions for 2021 data. 
 
-# Build the model
-logistic_pca_mod <- logistic_reg(penalty = 1) %>% 
-  set_engine("glmnet")
+``` {r run-model-immigrant-data}
 
-# Create a workflow
-logistic_pca_workflow <- 
-  workflow() %>% 
-  add_model(logistic_pca_mod) %>% 
-  add_recipe(asec_pca_rec)
-
-# Fit to folds
-logistic_pca_cv <- logistic_pca_workflow %>% 
-  fit_resamples(resamples = folds_pca)
-
-# Calculate RMSE and MAE for each fold 
-collect_metrics(logistic_pca_cv, summarize = FALSE) 
-
-# Select best model based on roc_auc
-logistic_pca_best <- logistic_pca_cv %>%
-  select_best(metric = "roc_auc")
-
-# Finalize workflow with best model
-logistic_last_pca_workflow <- logistic_pca_workflow %>%
-  finalize_workflow(parameters = logistic_pca_best)
-
-# Fit to the all training data and check feature importance
-set.seed(20220428) #Setting seed because Marlyn worries about reproducibility 
-
-logistic_last_fit <- logistic_last_pca_workflow %>%
-  fit(data = asec_pca_train)
-
-predict(logistic_last_fit, asec_pca_train) %>% 
-  group_by(.pred_class) %>% 
-  summarize(n = n())
-
-```
-
-``` {r best-mode-on-2021-data}
 # Prepare our implementation data
-asec2021_models <- as_tibble(asec2021) %>%
+asec2021_models <- asec2021 %>%
   filter(!is.na(employed)) %>%
   mutate(employed = as.factor(employed)) %>% # Make our y variable a factor
   select(-year, -serial, -cpsid, -immigrant) %>% # deselect variables we don't want to include as predictors
@@ -727,7 +686,48 @@ roc_auc(data = rf_predictions_2021,
 
 ```
 
+##How well does our model perform if applied to specific demographic groups?
+
+While our model fared well enough when we made predictions on IPUMS 2021 data [EDIT IF NOT], we wanted to see if the model would perform just as well if we were to restrict the population we wanted to predict employment status for. We decided to make predictions on a sample of  immigrants (excluding US native-born citizens) because we understood immigrants experienced the onset of COVID-19 in nuanced ways. For example, the below graph illustrates surprising find: while it's well-documented that the US unemployment rate rose during the course of the pandemic, the unemployment rate of US nativeborn citizens surpassed the rate for immigrants. 
+
+
+``` {r Immigrant-Specific Visualization}
+
+# percentage point change of unemployed people by immigrant status
+a <- asec_allyears %>%
+  filter(!is.na(employed))%>%
+  #filter(year ==2019 | year == 2020) %>% #Including 2021 so we can visualize how unemployment rose for both immigrants and nonimmigrants
+  select(year, employed, immigrant) %>%
+  group_by(year, immigrant) %>%
+  mutate(immigrant = as.factor(immigrant)) %>%
+  summarize(count = n(),
+            pct_unemployed = (1-mean(employed))) 
+
+a %>%
+  ggplot(aes(x= year, y= pct_unemployed)) +
+  geom_line(aes(color = immigrant, group = immigrant)) +
+  geom_point(size = 1) +
+   labs(
+    title = "Unemployment Rate Rose in the US During the Pandemic",
+    caption = "Source: IPUMS Data",
+    x = "",
+    y = "Unemployment Rate",
+    color = "Immigrant Status"
+  ) +
+  scale_y_continuous(labels = scales::percent, limits = c(0,.10)) +
+  scale_x_continuous(breaks = seq(2019, 2021, 1), 
+                     limits=c(2019, 2021)) +
+  scale_color_discrete(labels = c("Nonimmigrant", "Immigrant")) +
+  theme_minimal()
+
+```
+
+While we understood the unlikelihood that our model trained on the entire US population would perform well on a specific subgroup, we wanted to test it out as data science curious novices. Would the model still fare better than random guessing (indicative when the ROC area under the curve is 0.5)?
+
+***DO WE WANT TO APPLY TO 2020 OR 2021 IMMIGRANT DATA?
+
 ``` {r run-model-immigrant-data}
+
 # Create data frame only of immigrants
 asec_model_imm <- as_tibble(asec2021_imm) %>%
   filter(!is.na(employed)) %>%
@@ -739,7 +739,7 @@ asec_model_imm <- as_tibble(asec2021_imm) %>%
                  occ, ind, educ, classwly,
                  strechlk, spmmort, whymove, health, paidgh, statefip, employed), list(~ as.factor(.)))
 
-# Apply model to 2021 data
+# Apply model to 2021 immigrant data
 rf_predictions_imm <- bind_cols(asec_model_imm, 
                                  predict(object = rf_last_fit, new_data = asec_model_imm),
                                  predict(object = rf_last_fit, new_data = asec_model_imm, type = "prob"))
@@ -765,3 +765,5 @@ roc_auc(data = rf_predictions_imm,
         estimate = .pred_0)
 
 ```
+
+[HERE IS WHERE WE TALK ABOUT WHAT WE FOUND - DID MODEL FARE WELL APPLYING TO IMMIGRANT SUBGROUP?]
