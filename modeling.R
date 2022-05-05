@@ -257,6 +257,59 @@ rf_cv <- tune_grid(rf_workflow,
                    grid = rf_grid,
                    metrics = metric_set(roc_auc))
 
+#Calculate ROC_AUC and accuracy for each fold 
+collect_metrics(rf_cv, summarize = TRUE) %>%
+  filter(.metric == "roc_auc")
+
+# Select best model based on roc_auc
+rf_best <- rf_cv %>%
+  select_best(metric = "roc_auc")
+
+# Finalize model
+rf_final_model <- finalize_model(rf_mod, rf_best)
+
+# Finalize workflow (2nd way)
+rf_last_workflow <- workflow() %>%
+  add_recipe(rf_rec) %>%
+  add_model(rf_final_model)
+
+# Fit to the all training data
+set.seed(20220429) #Setting seed because Marlyn worries about reproducibility 
+rf_last_fit <- rf_last_workflow %>%
+  fit(asec_train)
+
+# Look at feature importance
+rf_last_fit %>%
+  extract_fit_parsnip() %>%
+  vip(num_features = 20)
+
+# Apply model to testing data
+rf_predictions <- bind_cols(asec_test, 
+                            predict(object = rf_last_fit, new_data = asec_test),
+                            predict(object = rf_last_fit, new_data = asec_test, type = "prob"))
+
+# Assess its performance
+conf_mat(data = rf_predictions,
+         truth = employed,
+         estimate = .pred_class)
+
+# How often the model is correct (overall)
+accuracy(data = rf_predictions,
+          truth = employed,
+          estimate = .pred_class)
+
+# How often the model is correct when a person is actually unemployed
+spec(data = rf_predictions,
+         truth = employed,
+         estimate = .pred_class)
+
+# Our ROC_AUC metric, which also serves as our out-of-sample error rate
+roc_auc(data = rf_predictions,
+     truth = employed,
+     estimate = .pred_0)
+
+# -------Model 1.5: Random Forest Using Principle Components as Predictors------
+
 # # Build a random forest that will incorporate principal components as predictors
 # rf_mod_pca <- rand_forest(mtry = 10, min_n = tune(), trees = 100) %>%
 #   set_engine("ranger", importance = "impurity") %>%
@@ -279,63 +332,6 @@ rf_cv <- tune_grid(rf_workflow,
 #                    grid = rf_grid_pca,
 #                    metrics = metric_set(roc_auc))
 
-#Calculate ROC_AUC and accuracy for each fold 
-collect_metrics(rf_cv, summarize = TRUE) %>%
-  filter(.metric == "roc_auc")
-
-# Select best model based on rmse (MARLYN note: we can choose to do it based on best roc_auc?)
-rf_best <- rf_cv %>%
-  select_best(metric = "roc_auc")
-
-# Finalize model
-rf_final_model <- finalize_model(rf_mod, rf_best)
-
-# Look at (plot) feature importance
-library(vip)
-rf_final_model %>%
-  set_engine("ranger", importance = "permutation") %>%
-  fit(employed ~ ., data = asec_train) %>%
-  vip(geom = "point")
-
-# # Finalize workflow with best model (1st way)
-# rf_last_workflow <- rf_workflow %>%
-#   finalize_workflow(parameters = rf_best)
-
-# Finalize workflow (2nd way)
-rf_last_workflow <- workflow() %>%
-  add_recipe(rf_rec) %>%
-  add_model(rf_final_model)
-
-# Fit to the all training data
-set.seed(20220429) #MARLYN: is it best practice to set a seed before last fit?
-rf_last_fit <- rf_last_workflow %>%
-  last_fit(split = split, metrics = metric_set(roc_auc))
-
-# Look at feature importance
-rf_last_fit %>%
-  extract_fit_parsnip() %>%
-  vip(num_features = 20)
-
-# ------------------Train model on all training data --------------------------
-# THIS ALSO DIDN'T WORK
-# # the last model
-# last_rf_mod <- 
-#   rand_forest(mtry = 10, min_n = 2, trees = 100) %>% 
-#   set_engine("ranger", importance = "impurity") %>% 
-#   set_mode("classification")
-# 
-# # the last workflow
-# last_rf_workflow <- 
-#   rf_workflow %>% 
-#   update_model(last_rf_mod)
-# 
-# # the last fit
-# set.seed(345)
-# last_rf_fit <- 
-#   last_rf_workflow %>% 
-#   last_fit(split)
-
-
 # -------------------------Model 2: Logistic Regression (PCA)------------------------------
 
 # Model 2: Logistic regression 
@@ -357,7 +353,7 @@ logistic_pca_cv <- logistic_pca_workflow %>%
 # Calculate RMSE and MAE for each fold 
 collect_metrics(logistic_pca_cv, summarize = FALSE) 
 
-# Select best model based on rmse (MARLYN note: we can choose to do it based on best roc_auc?)
+# Select best model based on roc_auc
 logistic_pca_best <- logistic_pca_cv %>%
   select_best(metric = "roc_auc")
 
@@ -366,15 +362,21 @@ logistic_last_pca_workflow <- logistic_pca_workflow %>%
   finalize_workflow(parameters = logistic_pca_best)
 
 # Fit to the all training data and check feature importance
-set.seed(20220428) #MARLYN: is it best practice to set a seed before last fit?
+set.seed(20220428) #Setting seed because Marlyn worries about reproducibility 
 
 logistic_last_fit <- logistic_last_pca_workflow %>%
   fit(data = asec_pca_train)
 
-predict(logistic_last_fit, asec_pca_train) %>% group_by(.pred_class) %>% summarize(n = n())
+predict(logistic_last_fit, asec_pca_train) %>% 
+  group_by(.pred_class) %>% 
+  summarize(n = n())
 
 # -------------Running the best model specification on the 2021 data------------
 
+# Prepare our implementation data
+asec2021 <- cps_svy %>%
+  filter(year == 2021) %>%
+  select(-employed)
 
 
 # -------------------------Run model on immigrant data--------------------------
