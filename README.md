@@ -2,7 +2,7 @@
 # Authors: Sylvia Brown, Pierina Forastieri, Marlyn Bruno, Julia Buschmann
  
 ## Objective:
-This project's objective is to .... 
+This project's objective is to develop a model for predicting an individual's economic precarity as a product of the recessionary impacts of a pandemic, and could possibly be generalized to natural disasters with similar effects.  We do this by first finding the most important variables for predicting unemployment using Principal Components Analysis (PCA). We integrate these insights into the development of a random forest model and a logistic regression model using CPS data from 2019 and 2020. We then implement these models with data from 2021 to test its accuracy with appropriately determining when an individual was, indeed, unemployed and test to see if we can accurately generalize the model to a subset of the population. With a model like this, we can identify correlations between individual characteristics (e.g., income, state, type of health insurance) and unemployment so that, when a future pandemic or natural disaster occurs, policymakers will be better equipped to understand risk factors for experiencing economic hardship.
 
 ## Files in the repository:
 - **Final_Project.Rmd**: This file contains the R code to carry out the analysis for the final project. Plain text and comments in the code chunks clarify what is being done in each part of the code. It was separated into chunks for readability and to clearly identify which exercise is being completed.
@@ -21,7 +21,7 @@ To replicate our analysis, run this code as follows:
 
 2. Download the data .... Save all the data files in the `data` `folder.
 
-3. Please download the required R Libraries:
+3. Please download the required R Libraries: ** REMEMBER TO UPDATE**
 - `ipumsr`
 - `srvyr`
 - `ggplot2`
