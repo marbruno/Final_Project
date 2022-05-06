@@ -43,6 +43,7 @@ library(sf)
 library(sjlabelled)
 library(srvyr)
 library(tidyverse)
+library(tigris)
 
 ```
 
@@ -511,7 +512,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
 
 We decided to first try using principal components as predictors in a logistic regression model to predict whether someone was employed or not. We attempted to run a logistical regression model with the same predictors used to generate the PCs, but found it computationally too expensive Below, we prepare the logistic model with four folds of the training data--fewer than the standard ten folds again for the sake of computational speed.
 
-``` {r Model 1, results="hide"}
+``` {r Model-1, results="hide"}
 # Preparing data for models
 
 # Set seed so that selection of training/testing data is consistent between runs
@@ -691,7 +692,7 @@ rf_last_fit <- rf_last_workflow %>%
 # Look at feature importance
 rf_last_fit %>%
   extract_fit_parsnip() %>%
-  vip(num_features = 20)
+  vip::vip(num_features = 20)
   
 ```
 
