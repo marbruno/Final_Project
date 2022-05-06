@@ -19,7 +19,8 @@ To replicate our analysis, run this code as follows:
 
 1. Create an .Rproject and a data folder inside that project folder.
 
-2. Download the data .... Save all the data files in the `data` `folder.
+2. Download the following varibales from IPUMS CPS (https://cps.ipums.org/cps-action/variables/group) and save all the data files in the `data` `folder:
+YEAR, SERIAL, MONTH, CPSID, ASECFLAG, ASECWTH, REGION, STATEFIP, METRO, METAREA, COUNTY, STATECENSUS, METFIPS, HHINCOME, UNITSSTR, PERNUM, CPSIDP, ASECWT, ASECWTCVD, AGE, SEX, RACE, YRIMMIG, CITIZEN, HISPAN, EMPSTAT, LABFORCE, OCC, IND, EDUC, CLASSWLY, WKSUNEM, WKSUNEM2, STRECHLK, FTOTVAL, INCTOT, INCWELFR, INCUNEMP, CTCCRD, EITCRED, OFFPOV, SPMMORT, WHYMOVE, DISABWRK, HEALTH, PAIDGH, HIMCARENW, CAIDNW, MOOP, HIPVAL, ANYCOVLY, PRVTCOVNW, GRPCOVN, MRKCOVNW, MRKSCOVNW, MRKUCOVNW, INHCOVNW, SCHIPNW.
 
 3. Please download the required R Libraries: ** REMEMBER TO UPDATE**
 - `ipumsr`
