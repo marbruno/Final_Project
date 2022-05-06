@@ -40,4 +40,4 @@ To replicate our analysis, run this code as follows:
 ### Contact:
 Contact Sylvia Brown at scb136 [at] georgetown.edu, Pierina Forastieri at pnf9 [at] georgetown.edu, Marlyn Bruno at mb2545 [at] georgetown.edu or Julia Buschmann at jrb361 [at] georgetown.edu
 
-*This README.md was last updated on May 3rd, 2022*
+*This README.md was last updated on May 6th, 2022*
