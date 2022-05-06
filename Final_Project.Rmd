@@ -22,7 +22,7 @@ While the COVID-19 pandemic started as a public health crisis, households in the
 ### About This Project
 The primary contribution of our project is to generate a model to predict unemployment using data before and during the pandemic (2019 and 2020).
 
-To better understand our modeling data, we develop several data visualizations using data from the Current Population Survey (CPS) ASEC supplements (2019-2021) to see how unemployment and employment varies by age group and state. We then identify variables used to include as predictors in our predictive model and use Principal Components Analysis (PCA) to generate uncorrelated components to represent the variance of these variables. Using both our original predictors and the resulting PCs, we generate a random forest model and a logistic regression model trained on ASEC data from 2019 and 2020 to predict whether an individual was employed. We then implement the best model (selected by identifying the model with the highest area under the ROC curve) on data from 2021 to test its accuracy in predicting whether an individual was employed in the second year of the pandemic. We also test the model on a subset of the population (immigrants) to see if the model, which was developed with both immigrants and non-immigrants, is generalizable to only immigrants. With a model like this, we can predict the employment status for future individuals for whom we have data on their characteristics (e.g., income, state, type of health insurance) so that when a future pandemic or natural disaster happens, policymakers will be better equipped to understand who to target support towards. This model can therefore support an informed approach to outreach, so that governments or social service agencies can focus their resources with targeted outreach to the individuals that are predicted to be unemployed after the start of the pandemic.
+To better understand our modeling data, we develop several data visualizations using data from the Current Population Survey (CPS) ASEC supplements (2019-2021) to see how unemployment and employment varies by age group and state. We then identify variables used to include as predictors in our predictive model and use Principal Components Analysis (PCA) to generate uncorrelated components to capture a portion of the variance of the original predictors. Using both our original predictors and the resulting PCs, we generate a random forest model and a logistic regression model trained on ASEC data from 2019 and 2020 to predict whether an individual was employed. We then implement the best model (selected by identifying the model with the highest area under the ROC curve) on data from 2021 to test its accuracy in predicting whether an individual was employed in the second year of the pandemic. We also test the model on a subset of the population (immigrants) to see if the model, which was developed with both immigrants and non-immigrants, is generalizable to only immigrants. With a model like this, we can predict the employment status for future individuals for whom we have data on their characteristics (e.g., income, state, type of health insurance) so that when a future pandemic or natural disaster happens, policymakers will be better equipped to understand who to target support towards. This model can therefore support an informed approach to outreach, so that governments or social service agencies can focus their resources with targeted outreach to the individuals that are predicted to be unemployed after the start of the pandemic.
 
 ### Data Sources
 For this analysis, we employ the [Annual Social and Economic Supplemental (ASEC)](https://www.census.gov/programs-surveys/saipe/guidance/model-input-data/cpsasec.html) of the Current Population Survey (CPS), also known as the March Supplemental survey. The CPS ASEC survey is conducted annually, mostly in March, during a one month window of data collection. The survey asks participants a series of questions that are similar to the CPS survey, but also asks about topics related to income, earnings, poverty, and the foreign-born population.^[https://www.census.gov/topics/population/foreign-born/guidance/cps-guidance/cps-vs-asec.html] Our project uses the March Supplemental survey results from 2019, 2020, and 2021. We accessed these data through Integrated Public Use Microdata Series (IPUMS) at the University of Minnesota.^[Sarah Flood, Miriam King, Renae Rodgers, Steven Ruggles, J. Robert Warren and Michael Westberry. Integrated Public Use Microdata Series, Current Population Survey: Version 9.0 [dataset]. Minneapolis, MN: IPUMS, 2021. https://doi.org/10.18128/D030.V9.0]
@@ -315,19 +315,19 @@ status_bystate %>%
 We see significant variation in unemployment at the state level. In only March 2020, only two months after the first case hit the U.S., states were responding with stay-at-home orders and closing businesses were firing or laying off employees. One of the hardest-hit industries was leisure and hospitality, which is a core industry in Nevada and was quickly impacted when closures began.^[Aaron Klein and Ember Smith. Explaining the Economic Impact of COVID-19: Core Industries and the Hispanic Workforce. Feb. 5, 2021. https://www.brookings.edu/research/explaining-the-economic-impact-of-covid-19-core-industries-and-the-hispanic-workforce/.]
 
 
-```{r, download shapefiles, results = "hide"}
+```{r, download-shapefiles, results = "hide"}
 states <- tigris::states(cb = TRUE, progress_bar = FALSE) %>%
   filter(!STATEFP %in% c("78", "69", "66", "60", "72", "02", "15"))
 ```
 ### We can maybe delete the below code if it's already converted into a survey object, but it must be converted into a survey object to create the map
-```{r, turning the df into a survey object with weights, results = "hide"}
-cps_svy <- cps_svy %>%
+```{r, turning-the df-into-a-survey-object-with-weights, results = "hide"}
+cps_svy_map <- cps_svy %>%
   as_survey_design(weights = asecwtcvd)
 ```
 
-```{r, creating a map, results = "hide"}
-# filtering cps_svy to the desired year, grouping to state, and getting the mean unemployment
-df1 <- cps_svy %>%
+```{r, creating-a-map}
+# filtering cps_svy_map to the desired year, grouping to state, and getting the mean unemployment
+df1 <- cps_svy_map %>%
   filter(year == 2020, !is.na(employed)) %>%
    group_by(statefip) %>%
    srvyr::summarize(emp_rate = survey_mean(1 - employed)) %>%
@@ -509,7 +509,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
 
 ```
 
-We decided to first try using principal components as predictors in a logistic regression model to predict whether someone was employed or not. We attempted to run a logistical regression model with the same predictors used to generate the PCs, but found it computationally too onerous. Below, we prepare the logistic model with four folds of the training data--fewer than the standard ten folds again for the sake of computational speed.
+We decided to first try using principal components as predictors in a logistic regression model to predict whether someone was employed or not. We attempted to run a logistical regression model with the same predictors used to generate the PCs, but found it computationally too expensive Below, we prepare the logistic model with four folds of the training data--fewer than the standard ten folds again for the sake of computational speed.
 
 ``` {r Model 1, results="hide"}
 # Preparing data for models
@@ -578,7 +578,7 @@ log_reg_predictions <- bind_cols(asec_pca_test,
 
 ```
 
-Looking at the results of the logistic regression below, we see that our model predicts exclusively zeros, 
+Looking at the results of the logistic regression below, we see that our model predicts exclusively zeros, meaning that it performs no better than a random guess as to a person's unemployment status (see area under the curve as 0.5).
 ```{r log-assessment}
 # Assess its performance
 conf_mat(data = log_reg_predictions,
@@ -600,7 +600,8 @@ roc_auc(data = log_reg_predictions,
      truth = employed,
      estimate = .pred_0)
 ```
-[TALK ABOUT HOW THE PCA-LM MODEL DID HERE]...We were not content with the performance of our final logistic regression model. We decided to next try a Random Forest algorithm. We wanted to tune for the minimum number of data points in a node that are required for a Random Forest node to be split further (min_n). While we also wanted to tune for number of predictors randomly sampled at each split within individual trees (mtry), we came to realize that it was a very computationally expensive process and limited tuning to only one hyperparameter. 
+
+Because were not content with the performance of our final logistic regression model, we decided to compare it to a random forest algorithm. We wanted to tune for the minimum number of data points in a node that are required for a random forest node to be split further (min_n). While we also wanted to tune for number of predictors randomly sampled at each split within individual trees (mtry), we came to realize that it was a very computationally expensive process and limited tuning to only one hyperparameter. 
 
 ```{r run-rf-model, results="hide"}
 # Preparing data for models
@@ -620,7 +621,7 @@ asec_models_2019_2020 <- asec_2019_2020 %>%
 set.seed(20201020)
 
 # Split into training and testing data
-split <- initial_split(data = asec_models_2019_2020, prop = 0.8)
+split <- rsample::initial_split(data = asec_models_2019_2020, prop = 0.8)
 
 asec_train <- remove_val_labels(training(split))
 asec_test <- remove_val_labels(testing(split))
