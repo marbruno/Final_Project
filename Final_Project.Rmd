@@ -15,7 +15,23 @@ knitr::opts_chunk$set(warning = FALSE)
 knitr::opts_chunk$set(message = FALSE)
 ```
 
+### Introduction
+While the COVID-19 pandemic started as a public health crisis, households in the U.S. and other countries experienced the pandemic as a accumulated housing, labor, and financial crises as well. Given the dramatic and often unpredictable impact of the pandemic on the labor force, determining how to predict the economic impact of future, similar events is of interest. Being able to predict whether an individual experiences unemployment as a result of the pandemic, for example, may be useful in planning targeted future interventions during such unusual times.
+
+
+### About This Project
+The primary contribution of our project is to generate a model to predict unemployment using data before and during the pandemic (2019 and 2020).
+
+To better understand our modeling data, we develop several data visualizations using data from the Current Population Survey (CPS) ASEC supplements (2019-2021) to see how unemployment and employment varies by age group and state. We then identify variables used to include as predictors in our predictive model and use Principal Components Analysis (PCA) to generate uncorrelated components to represent the variance of these variables. Using both our original predictors and the resulting PCs, we generate a random forest model and a logistic regression model trained on ASEC data from 2019 and 2020 to predict whether an individual was employed. We then implement the best model (selected by identifying the model with the highest area under the ROC curve) on data from 2021 to test its accuracy in predicting whether an individual was employed in the second year of the pandemic. We also test the model on a subset of the population (immigrants) to see if the model, which was developed with both immigrants and non-immigrants, is generalizable to only immigrants. With a model like this, we can predict the employment status for future individuals for whom we have data on their characteristics (e.g., income, state, type of health insurance) so that when a future pandemic or natural disaster happens, policymakers will be better equipped to understand who to target support towards. This model can therefore support an informed approach to outreach, so that governments or social service agencies can focus their resources with targeted outreach to the individuals that are predicted to be unemployed after the start of the pandemic.
+
+### Data Sources
+For this analysis, we employ the [Annual Social and Economic Supplemental (ASEC)](https://www.census.gov/programs-surveys/saipe/guidance/model-input-data/cpsasec.html) of the Current Population Survey (CPS), also known as the March Supplemental survey. The CPS ASEC survey is conducted annually, mostly in March, during a one month window of data collection. The survey asks participants a series of questions that are similar to the CPS survey, but also asks about topics related to income, earnings, poverty, and the foreign-born population.^[https://www.census.gov/topics/population/foreign-born/guidance/cps-guidance/cps-vs-asec.html] Our project uses the March Supplemental survey results from 2019, 2020, and 2021. We accessed these data through Integrated Public Use Microdata Series (IPUMS) at the University of Minnesota.^[Sarah Flood, Miriam King, Renae Rodgers, Steven Ruggles, J. Robert Warren and Michael Westberry. Integrated Public Use Microdata Series, Current Population Survey: Version 9.0 [dataset]. Minneapolis, MN: IPUMS, 2021. https://doi.org/10.18128/D030.V9.0]
+
+To view further details of the project, visit the project's public GitHub repository [here](https://github.com/marbruno/Final_Project).
+
+Below, we load in our libraries.
 ``` {r add-libraries}
+# Add libraries
 library(formattable)
 library(ggalt)
 library(haven)
@@ -28,28 +44,29 @@ library(tidyverse)
 
 ```
 
-How to customize .Rmd:
-- To suppress output from the code chunk, include `results = "hide"` in the title for the code chunk
-- To center the figure, include `fig.align = "center"` in the title for the code chunk
-
-```{r loading data}
+Next, we read in the ASEC data, recoding missing values as NAs, recoding variables as dummies, dropping extraneous variables, filtering out people in the armed forces, and selecting only adults aged 18 to 65 (inclusive). We also create two new variables: `employed`, which indicates whether a respondent is unemployed or employed and is NA for anyone outside of the labor force; and `immigrant`, which is a dummy variable coded as 1 for people born in the U.S. and 0 for people born in the U.S. outlying territories (e.g., PR, Guam), naturalized citiens, non-citizens, and people born abroad of American parents. Finally, we create the data tables that we will use throughout our analysis. 
+```{r loading-data}
 ddi <- read_ipums_ddi("data/cps_00004.xml")
 data <- read_ipums_micro(ddi) %>%
   janitor::clean_names()
 
 cps_svy <- data %>%
-  filter(empstat != 1) %>% #filter  out people in armed forces
-  filter(age >= 18 & age < 66) %>% #filter out minors; leave only adults
+  # Filter  out people in armed forces
+  filter(empstat != 1) %>% 
+  filter(age >= 18 & age < 66) %>%
+  # Filter out minors; leave only adults
   mutate(employed = case_when(
     empstat == 10 | empstat == 12 ~ 1,
     empstat == 21 | empstat == 22 ~ 0,
     TRUE ~ NA_real_
   )) %>%
+  # Recode variables as dummies (0,1)
   mutate_at(vars(offpov, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw, mrkscovnw, mrkucovnw, inhcovnw, sex), list(~ case_when(
     . == 2 ~ 1,
     . == 1 ~ 0,
     TRUE ~ NA_real_
   ))) %>%
+  # Turn values coded as missing into NAs
   mutate(unitsstr = case_when(
     unitsstr == 00 ~ NA_real_,
     TRUE ~ as.numeric(unitsstr)
@@ -58,7 +75,6 @@ cps_svy <- data %>%
     region == 97 ~ NA_real_,
     TRUE ~ as.numeric(region)
   )) %>%
-  filter(statefip <= 56) %>% # drop weird multi-state fips codes
   mutate(metro = case_when(
     metro == 0 | metro >= 4 ~ NA_real_,
     TRUE ~ as.numeric(metro)
@@ -120,11 +136,15 @@ cps_svy <- data %>%
     wksunem2 == 9 ~ 0,
     TRUE ~ as.numeric(wksunem2)
   )) %>%
-  select(-starts_with("q"), -asecwt, -month, -asecflag, -statecensus, -asecwth, -pernum, -cpsidp) # Drop quality flags and variables we don't need
-  # NOTE: the 'immigrant' variable is 1 for people born in the U.S.; 0 for people born in the U.S. outlying territories (PR, Guam), people born abroad of American parents, naturalized citizens, and non-citizens; and NA for people marked as NIU.
+  # Drop multi-state fips codes
+  filter(statefip <= 56) %>% 
+  # Drop quality flags and variables we don't need
+  select(-starts_with("q"), -asecwt, -month, -asecflag, -statecensus, -asecwth, -pernum, -cpsidp) 
 
+# Create a weighted survey object using COVID-19 ASEC weight
 asec_allyears <- as_survey_design(cps_svy, weights = asecwtcvd)
 
+# Create tibbles by year and tibbles with only immigrant population
 asec2019 <- asec_allyears %>%
   filter(year == 2019)
 
@@ -148,8 +168,11 @@ asec2021_imm <- asec2021 %>%
   
 ```
 
-```{r EDA}
-# % unemployed, employed, out of labor force in each 
+### Visualizing Employment
+The first cases of COVID-19 appeared in the U.S. in early January, but it took several months for employees to feel the full effect of the pandemic on employment. As cases rose, businesses closed. Below we see the beginning of the impact that COVID-19 will come to have on the U.S. labor market. In March of 2020, there was a 1.5 percentage point increase in the unemployment rate from the year prior. A year later, we can see the sustained impact of the pandemic on the labor market and the repercussions from the Alpha variant, which peaked in January of 2021. In March 2021, the unemployment rate was about 2.5 percentage points higher than it was at the same time in 2019 (or about 1 percentage point higher than a year prior).
+
+```{r unempoyed-viz, fig.align = "center"}
+# % Unemployed, employed, out of labor force in each 
 asec_allyears %>%
   drop_na(employed) %>%
   select(year, employed) %>%
@@ -159,7 +182,7 @@ asec_allyears %>%
   geom_col(position="dodge") +
   labs(
     title = "Percentage of Unemployed and Employed Out of the Labor Force",
-    subtitle = "(in % for 2019, 2020, 2021)",
+    subtitle = "The unemployment rate grew by 1.5 and 1 percentage points \n between 2019 and 2020 and 2020 and 2021, respectively",
     caption = "Source: IPUMS Data",
     x = "Year",
     y = "%",
@@ -171,10 +194,14 @@ asec_allyears %>%
   scale_fill_hue(labels = c("Unemployed", "Employed")) +
   theme(legend.title = element_blank()) +
   theme_minimal()
- 
 
-# How does employment vary by age?
-# employed
+```
+
+Overall, the share of employed people by age group remains relatively constant between 2019 and 2021. The most common age bracket among the unemployed was 18-24 year olds in all years included in our research (2019, 2020, and 2021), but their share of the unemployed decrease between 2019 and 2021.
+
+```{r employ-age,  fig.align = "center"}
+# How does age differ between the employed and unemployed populations?
+# Employed
 employed_graph <- asec_allyears %>%
    mutate(
     # Create categories
@@ -194,22 +221,21 @@ employed_graph <- asec_allyears %>%
   summarise(cnt = n()) %>%
   mutate(freq = percent(cnt / sum(cnt))) %>%
   ggplot(aes(x=age_group, y=freq, fill=factor(year))) + 
-  geom_col(position="dodge") +
+  geom_col(position="dodge", show.legend=FALSE) +
   geom_text(aes(age_group, label = freq), position = position_dodge(width = 1), hjust = -.25) +
   coord_flip() +
   scale_y_continuous(labels = scales::percent, limits = c(0,.3)) +
   labs(
-    title = "Employed by Age Group",
-    subtitle = "(for 2019, 2020, 2021)",
-    caption = "Source: IPUMS Data",
+    title = "Age Composition of Employed Population by Year",
+    subtitle = "The age composition of the employed population \n stayed relatiely consistent from 2019 to 2021, but this is \n not true of the unemployed population",
     x = "Age Group",
     y = "",
-    fill = "Year",
+    fill = "Year"
   ) +
-  theme(legend.title = element_blank()) +
   theme_minimal()
+  
 
-# unemployed
+# Unemployed
 unemployed_graph <- asec_allyears %>%
    mutate(
     # Create categories (18-24; 24-30; 31-37; 38-44, 45-51, 52-58, 58-64)
@@ -234,19 +260,25 @@ unemployed_graph <- asec_allyears %>%
   coord_flip() +
   scale_y_continuous(labels = scales::percent, limits = c(0,.35)) +
   labs(
-    title = "Unemployed by Age Group",
+    title = "Age Composition of Unemployed Population by Year",
     subtitle = "(in % for 2019, 2020, 2021)",
     caption = "Source: IPUMS Data",
-    x = "Age Group",
     y = "",
-    fill = "Status",
+    fill = "Year",
   ) +
   theme(legend.title = element_blank()) +
   theme_minimal()
 
 employed_graph + unemployed_graph
 
-# dumbbell % unemployed by state between 2019 and 2020
+```
+
+The majority of states saw dramatic increases in their unemployment rate after the pandemic began, though some saw only minor changes. In the data represented below, there are increases as severe as 4.5 percentage points, but many states have an increase closer to 2 percentage points. This uptick in unemployment left many to rely on unemployment assistance, which varied significantly in amount and ease-of-access between states. ***SOURCE
+<br>
+<br>
+Notably, there are also a few states (e.g., Alaska, Maine, Kentucky) where unemployment fell slightly betweeen March 2019 and March 2020, potentially due to their more moderate approach to pandemic mitigation. ***SOURCE
+``` {r dumbbell, fig.align = "center"}
+# Dumbbell % unemployed by state between 2019 and 2020
 status_bystate <- asec_allyears %>%
   drop_na(employed) %>%
   filter(year ==2019 | year == 2020) %>%
@@ -259,7 +291,7 @@ status_bystate %>%
   filter(employed == 0) %>%
   select(year, statefip, freq) %>%
   pivot_wider(names_from = year, values_from = freq) %>%
-  ggplot(aes(x=`2019`, xend=`2020`, y=as_label(statefip))) +
+  ggplot(aes(x=`2019`, xend=`2020`, y=sjlabelled::as_label(statefip))) +
   geom_dumbbell(color="#a3c4dc", 
                 colour_x="#edae52", 
                       colour_xend = "#9fb059",
@@ -267,8 +299,8 @@ status_bystate %>%
                       point.colour.l="#0e668b") + 
   scale_x_continuous(label = percent)  +
   labs(
-    title = "Unemployed by State",
-    subtitle = "(2019 'yellow' and 2020 'green')",
+    title = "Unemployment Rate by State",
+    subtitle = "Most states saw sizable jumps in unemployment",
     caption = "Source: IPUMS Data",
     x = "",
     y = "States",
@@ -277,13 +309,15 @@ status_bystate %>%
 
 ```
 
-```{r model-prep}
-# Loading libraries
-library(tidymodels)
-library(survey)
-library(parsnip)
+### Modeling
 
-# New modeling script
+After having looked at our employment data, we begin to put together our models, loading in the relevant libraries and creating a tibble for our 2019 and 2020 data for the model below.
+```{r model-prep}
+# Load modeling libraries
+library(parsnip)
+library(survey)
+library(tidymodels)
+
 # Create tibble with 2019 and 2020 data for model training, testing
 # Removes variable we're trying to predict (employed)
 asec_2019_2020 <- cps_svy %>%
@@ -292,13 +326,16 @@ asec_2019_2020 <- cps_svy %>%
 
 ```
 
-When conceptualizing the potential different models we could build to predict people's employment status, we were curious to see if principal components could be used as predictors. To avoid data leakage, it is necessary for the principal components to be constructed each time our model specifications run through new cross-validation folds. As such, principal component analysis needed to be part of our preprocessing, and we included it as the last step of our model recipe. Nevertheless, we had to construct a specific data set to use principal components as predictors since we needed to convert categorical variables into dummy variables without increasing their weight in the machine learning algorithms. 
+When conceptualizing the potential different models we could build to predict people's employment status, we were curious to see if principal components could be used as predictors. To avoid data leakage, it is necessary for the principal components to be constructed each time our model specifications run through new cross-validation folds. As such, principal component analysis needed to be part of our pre-processing, and we included it as the last step of our model recipe. Nevertheless, we had to construct a specific data set to use principal components as predictors since we needed to convert categorical variables into dummy variables without increasing their weight in the machine learning algorithms. 
+<br>
+<br>
+We also needed to recode variables that had NA values. Most of these NAs were in categorical variables and were due to the question not being asked of the entire survey population. In these instances, we created a dummy variable for whether the variable took on a value of NA. Where the NA was in a numeric variable, we recoded it to zero in reading in the data because in these cases given that not being in the question universe means that non-respondents had a value of zero for these variables (e.g., people who did not look for work in the past year equivalently looked for work zero weeks of the past year). We did not want to impute values for these observations because they were not eligible to answer the question, and so imputation may have led to impossible or improbable sets of responses (e.g., someone who was employed for the past year but is imputed to have looked for work for 5 weeks in the past year).
+<br>
+<br>
+Finally, in preparing for PCA, we also recoded dummy variables as taking on values 0 and sqrt(n), where n is the original number of categories included in the categorical variable that the dummies were generated from, so that categorical variables with a greater number of categories do not receive greater weight in the PCA compared to categorical variables with fewer categories.
 
 ```{r prep-data-pca-modeling}
 # ------------------------------------Creating data frame for step_pca------------------------------------
-
-# Kept yrimmig and strechlk with 0 variable for NIU
-# Recoded NIU values for wksunem1 (99) and wksunem2  (9) to zero
 
 # Select relevant variables from data set
 asec_pca_2019_2020 <- asec_2019_2020 %>%
@@ -309,17 +346,16 @@ asec_pca_2019_2020 <- asec_2019_2020 %>%
             occ, ind, educ, classwly,
             strechlk, spmmort, health, paidgh, whymove, statefip, employed), list(~ as.factor(.)))
 
+# Turn categorical variables into separate dummies
 asec_pca_2019_2020 <- recipe(~ ., asec_pca_2019_2020) %>%
   step_dummy(race, unitsstr, citizen, hispan,
              occ, ind, educ, classwly,
              strechlk, spmmort, whymove, health, paidgh, statefip) %>%
   prep() %>%
   bake(asec_pca_2019_2020)
-# Note: did not include in step_dummy: hhincome, age, yrimmig, existing indicator variables (sex,
-# offpov, disabwrk, himcarenw, caidnw, anycovly, prvtcovnw, grpcovnw, mrkcovnw, 
-# mrkscovnw, inhcovnw, schipnw), wksunem1, wksunem2, ftotval, inctto, incwelfr, 
-# incunemp, ctccrd, eitcred, moop, hipval
 
+# Change values of dummy variables such that being in a certain category is indicated with
+# a value of sqrt(n), where n = number of categories of the original categorical variable used to create the dummies
 asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
   mutate_at(
     vars(
@@ -427,15 +463,12 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
                       TRUE ~ NA_real_))
   )
 
-# asec_pca_2019_2020 can be run by the models and apply PCA to them (using step_pca)
-
 ```
 
-We decided to first try using principal components as predictors in a logistic regression model. 
+We decided to first try using principal components as predictors in a logistic regression model to predict whether someone was employed or not. We attempted to run a logistical regression model with the same predictors used to generate the PCs, but found it computationally too onerous. Below, we prepare the logistic model with four folds of the training data--fewer than the standard ten folds again for the sake of computational speed.
 
-``` {r Model 1}
+``` {r Model 1, results="hide"}
 # Preparing data for models
-#USE asec_pca_2019_2020
 
 # Set seed so that selection of training/testing data is consistent between runs
 # of the code chunk
@@ -447,8 +480,8 @@ split <- initial_split(data = asec_pca_2019_2020, prop = 0.8)
 asec_pca_train <- remove_val_labels(training(split))
 asec_pca_test <- remove_val_labels(testing(split))
 
-# Set up 10 v-folds
-folds_pca <- vfold_cv(data = asec_pca_train, v = 10)
+# Set up 4 v-folds
+folds_pca <- vfold_cv(data = asec_pca_train, v = 4)
 
 # Create recipe
 asec_pca_rec <-
@@ -494,12 +527,35 @@ set.seed(20220428) #Setting seed because Marlyn worries about reproducibility
 logistic_last_fit <- logistic_last_pca_workflow %>%
   fit(data = asec_pca_train)
 
-predict(logistic_last_fit, asec_pca_train) %>% 
-  group_by(.pred_class) %>% 
-  summarize(n = n())
+# Apply model to testing data
+log_reg_predictions <- bind_cols(asec_pca_test, 
+                            predict(object = logistic_last_fit, new_data = asec_pca_test),
+                            predict(object = logistic_last_fit, new_data = asec_pca_test, type = "prob"))
 
 ```
 
+Looking at the results of the logistic regression below, we see that our model predicts exclusively zeros, 
+```{r log-assessment}
+# Assess its performance
+conf_mat(data = log_reg_predictions,
+         truth = employed,
+         estimate = .pred_class)
+
+# How often the model is correct (overall)
+accuracy(data = log_reg_predictions,
+          truth = employed,
+          estimate = .pred_class)
+
+# How often the model is correct when a person is actually unemployed
+spec(data = log_reg_predictions,
+         truth = employed,
+         estimate = .pred_class)
+
+# Our ROC_AUC metric, which also serves as our out-of-sample error rate
+roc_auc(data = log_reg_predictions,
+     truth = employed,
+     estimate = .pred_0)
+```
 [TALK ABOUT HOW THE PCA-LM MODEL DID HERE]...We were not content with the performance of our final logistic regression model. We decided to next try a Random Forest algorithm. We wanted to tune for the minimum number of data points in a node that are required for a Random Forest node to be split further (min_n). While we also wanted to tune for number of predictors randomly sampled at each split within individual trees (mtry), we came to realize that it was a very computationally expensive process and limited tuning to only one hyperparameter. 
 
 ```{r Model 2}
@@ -616,33 +672,6 @@ roc_auc(data = rf_predictions,
 ```
 
 The area under the curve for our best RF model was 0.75, which is acceptable but not _superb_. We also are interested in the specificity of our model because policy practitioners looking to target unemployed folks for unemployment assistance or workforce opportunities are likely going to want to know how often our model is right when it predicts unemployment. Our model is correct 75% of the time it predicts unemployment. Ideally, we would want better precision so that we could be assured that any money spent on outreach would be well-invested.
-
-We also attempted to run the random forest with the principal components as predictors, but couldn't get it to run. [SYLIVA, delete this if you don't go ahead with PC-RF attempt]
-
-```{r model-random-forest-pca}
-# # Build a random forest that will incorporate principal components as predictors
-# rf_mod_pca <- rand_forest(mtry = 10, min_n = tune(), trees = 100) %>%
-#   set_engine("ranger", importance = "impurity") %>%
-#   set_mode("classification")
-# 
-# # Create a workflow
-# rf_workflow_pca <- 
-#   workflow() %>% 
-#   add_model(rf_mod_pca) %>% 
-#   add_recipe(asec_pca_rec)
-# 
-# # Create a grid of the parameters we're tuning for
-# rf_grid_pca <- grid_regular(
-#   min_n(range = c(2, 8)),
-#   levels = 4)
-# 
-# # Execute hyperparameter tuning using the grid and the cross_validation folds
-# rf_cv_pca <- tune_grid(rf_workflow_pca,
-#                    resamples = folds_pca,
-#                    grid = rf_grid_pca,
-#                    metrics = metric_set(roc_auc))
-
-```
 
 Now equipped with the best model, we wanted to see if it would also make precise predictions for new data! We used 2021 IPUMS data that had been excluded from our training set. Essentially, we wanted to assess whether our model that was trained on 2019 and 2020 data could make as good predictions for 2021 data. 
 
