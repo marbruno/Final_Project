@@ -34,10 +34,12 @@ Below, we load in our libraries.
 # Add libraries
 library(formattable)
 library(ggalt)
+library(ggplot2)
 library(haven)
 library(ipumsr)
 library(labelled)
 library(patchwork)
+library(sf)
 library(sjlabelled)
 library(srvyr)
 library(tidyverse)
@@ -273,6 +275,7 @@ employed_graph + unemployed_graph
 
 ```
 
+### Understanding Unemployment at the State Level
 The majority of states saw dramatic increases in their unemployment rate after the pandemic began, though some saw only minor changes. In the data represented below, there are increases as severe as 4.5 percentage points, but many states have an increase closer to 2 percentage points. This uptick in unemployment left many to rely on unemployment assistance, which varied significantly in amount and ease-of-access between states. ***SOURCE
 <br>
 <br>
@@ -307,6 +310,47 @@ status_bystate %>%
   ) +
   theme_minimal()
 
+```
+
+We see significant variation in unemployment at the state level. In only March 2020, only two months after the first case hit the U.S., states were responding with stay-at-home orders and closing businesses were firing or laying off employees. One of the hardest-hit industries was leisure and hospitality, which is a core industry in Nevada and was quickly impacted when closures began.^[Aaron Klein and Ember Smith. Explaining the Economic Impact of COVID-19: Core Industries and the Hispanic Workforce. Feb. 5, 2021. https://www.brookings.edu/research/explaining-the-economic-impact-of-covid-19-core-industries-and-the-hispanic-workforce/.]
+
+
+```{r, download shapefiles, results = "hide"}
+states <- tigris::states(cb = TRUE, progress_bar = FALSE) %>%
+  filter(!STATEFP %in% c("78", "69", "66", "60", "72", "02", "15"))
+```
+### We can maybe delete the below code if it's already converted into a survey object, but it must be converted into a survey object to create the map
+```{r, turning the df into a survey object with weights, results = "hide"}
+cps_svy <- cps_svy %>%
+  as_survey_design(weights = asecwtcvd)
+```
+
+```{r, creating a map, results = "hide"}
+# filtering cps_svy to the desired year, grouping to state, and getting the mean unemployment
+df1 <- cps_svy %>%
+  filter(year == 2020, !is.na(employed)) %>%
+   group_by(statefip) %>%
+   srvyr::summarize(emp_rate = survey_mean(1 - employed)) %>%
+   rename(STATEFP = statefip)
+
+# turning the state fip variable into a character, for compatibility before joining
+df2 <- rapply(df1, as.character, how = "replace") %>%
+   mutate(
+     STATEFP = str_pad(STATEFP, width = 2, side = c("left"), pad = "0"))
+
+# joining the df with unemployment to the shapefile
+sf1 <- left_join(states, df2, by = "STATEFP")
+
+# mapping unemployment for contiguous US
+unemp_map <- df2 %>%
+   ggplot() +
+   geom_sf(data = sf1, mapping = aes(fill = as.numeric(emp_rate))) +
+   scale_fill_distiller(direction = 1, name = "Unemployment Rate", palette = "YlGnBu") +
+   theme_void() +
+   labs(title = "Unemployment in the Contiguous U.S. in March 2020",
+        subtitle = "State-level unemployment varies from a low of 3% to a high of 8%")
+
+unemp_map
 ```
 
 ### Modeling
