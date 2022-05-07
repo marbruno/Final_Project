@@ -13,6 +13,8 @@ This project's objective is to develop a model for predicting an individual's ec
 
 - **modeling.R**: This file contains specific archived code for building and running our machine learning models. All code was eventually transferred to our Final_Project.Rmd file and finalized there.
 
+- **Final_Project.R**: This file contains our development of the final project report. All code was eventually transferred to our index.Rmd file and finalized there.
+
 - **README.md**: This README.md file contains a brief overview of the objective of the code, the files included in the repository, and instructions for replicating our analysis. 
 
 - **gitignore**: This file contains the files used for this code that we choose to exclude from the GitHub repository.
