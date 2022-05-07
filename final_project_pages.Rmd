@@ -1,5 +1,5 @@
 ---
-title: "GitHub Pages"
+title: "Using Predictive Analytics to Understand the Impacts of COVID-19 on Unemployment in the U.S."
 knit: (function(input_file, encoding) {
     out_dir <- 'docs';
     rmarkdown::render(input_file,

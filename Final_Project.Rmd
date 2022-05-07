@@ -47,7 +47,7 @@ library(tigris)
 
 ```
 
-Next, we read in the ASEC data, recoding missing values as NAs, recoding variables as dummies, dropping extraneous variables, filtering out people in the armed forces, and selecting only adults aged 18 to 65 (inclusive). We also create two new variables: `employed`, which indicates whether a respondent is unemployed or employed and is NA for anyone outside of the labor force; and `immigrant`, which is a dummy variable coded as 1 for people born in the U.S. and 0 for people born in the U.S. outlying territories (e.g., PR, Guam), naturalized citiens, non-citizens, and people born abroad of American parents. Finally, we create the data tables that we will use throughout our analysis. 
+Next, we read in the ASEC data, recoding missing values as NAs, recoding variables as dummies, dropping extraneous variables, filtering out people in the armed forces, and selecting only adults aged 18 to 65 (inclusive). We also create two new variables: `employed`, which indicates whether a respondent is unemployed or employed and is NA for anyone outside of the labor force; and `immigrant`, which is a dummy variable coded as 1 for people born in the U.S. and 0 for people born in the U.S. outlying territories (e.g., PR, Guam), naturalized citiens, non-citizens, and people born abroad of American parents. Finally, we create the data tables that we will use throughout our analysis.
 ```{r loading-data, results="hide"}
 ddi <- read_ipums_ddi("data/cps_00004.xml")
 data <- read_ipums_micro(ddi) %>%
@@ -55,7 +55,7 @@ data <- read_ipums_micro(ddi) %>%
 
 cps_svy <- data %>%
   # Filter  out people in armed forces
-  filter(empstat != 1) %>% 
+  filter(empstat != 1) %>%
   filter(age >= 18 & age < 66) %>%
   # Filter out minors; leave only adults
   mutate(employed = case_when(
@@ -140,9 +140,9 @@ cps_svy <- data %>%
     TRUE ~ as.numeric(wksunem2)
   )) %>%
   # Drop multi-state fips codes
-  filter(statefip <= 56) %>% 
+  filter(statefip <= 56) %>%
   # Drop quality flags and variables we don't need
-  select(-starts_with("q"), -asecwt, -month, -asecflag, -statecensus, -asecwth, -pernum, -cpsidp) 
+  select(-starts_with("q"), -asecwt, -month, -asecflag, -statecensus, -asecwth, -pernum, -cpsidp)
 
 # Create a weighted survey object using COVID-19 ASEC weight
 asec_allyears <- as_survey_design(cps_svy, weights = asecwtcvd)
@@ -168,20 +168,20 @@ asec2020_imm <- asec2020 %>%
 
 asec2021_imm <- asec2021 %>%
   filter(immigrant == 1)
-  
+
 ```
 
 ### Visualizing Employment
 The first cases of COVID-19 appeared in the U.S. in early January, but it took several months for employees to feel the full effect of the pandemic on employment. As cases rose, businesses closed. Below we see the beginning of the impact that COVID-19 will come to have on the U.S. labor market. In March of 2020, there was a 1.5 percentage point increase in the unemployment rate from the year prior. A year later, we can see the sustained impact of the pandemic on the labor market and the repercussions from the Alpha variant, which peaked in January of 2021. In March 2021, the unemployment rate was about 2.5 percentage points higher than it was at the same time in 2019 (or about 1 percentage point higher than a year prior).
 
 ```{r unempoyed-viz, fig.align = "center"}
-# % Unemployed, employed, out of labor force in each 
+# % Unemployed, employed, out of labor force in each
 asec_allyears %>%
   drop_na(employed) %>%
   select(year, employed) %>%
   group_by(year, employed) %>%
   summarise(pct = survey_prop()*100) %>%
-  ggplot(aes(x=year, y=pct, fill=factor(employed))) + 
+  ggplot(aes(x=year, y=pct, fill=factor(employed))) +
   geom_col(position="dodge") +
   labs(
     title = "Percentage of Unemployed and Employed Out of the Labor Force",
@@ -191,8 +191,8 @@ asec_allyears %>%
     y = "%",
     fill = "Status",
   ) +
-  geom_text(aes(label = round(pct,2)), 
-                position = position_dodge(width = 1), 
+  geom_text(aes(label = round(pct,2)),
+                position = position_dodge(width = 1),
                 color="black",vjust = -.2) +
   scale_fill_hue(labels = c("Unemployed", "Employed")) +
   theme(legend.title = element_blank()) +
@@ -223,7 +223,7 @@ employed_graph <- asec_allyears %>%
   group_by(year, age_group) %>%
   summarise(cnt = n()) %>%
   mutate(freq = percent(cnt / sum(cnt))) %>%
-  ggplot(aes(x=age_group, y=freq, fill=factor(year))) + 
+  ggplot(aes(x=age_group, y=freq, fill=factor(year))) +
   geom_col(position="dodge", show.legend=FALSE) +
   geom_text(aes(age_group, label = freq), position = position_dodge(width = 1), hjust = -.25) +
   coord_flip() +
@@ -236,7 +236,7 @@ employed_graph <- asec_allyears %>%
     fill = "Year"
   ) +
   theme_minimal()
-  
+
 
 # Unemployed
 unemployed_graph <- asec_allyears %>%
@@ -257,7 +257,7 @@ unemployed_graph <- asec_allyears %>%
   group_by(year, age_group) %>%
   summarise(cnt = n()) %>%
   mutate(freq = percent(cnt / sum(cnt))) %>%
-  ggplot(aes(x=age_group, y=freq, fill=factor(year))) + 
+  ggplot(aes(x=age_group, y=freq, fill=factor(year))) +
   geom_col(position="dodge") +
   geom_text(aes(age_group, label = freq), position = position_dodge(width = 1), hjust = -.25) +
   coord_flip() +
@@ -287,20 +287,20 @@ status_bystate <- asec_allyears %>%
   drop_na(employed) %>%
   filter(year ==2019 | year == 2020) %>%
   select(year, employed, statefip) %>%
-  group_by(year, statefip, employed) %>% 
+  group_by(year, statefip, employed) %>%
   summarise(cnt = n()) %>%
-  mutate(freq = percent(cnt / sum(cnt))) 
+  mutate(freq = percent(cnt / sum(cnt)))
 
 status_bystate %>%
   filter(employed == 0) %>%
   select(year, statefip, freq) %>%
   pivot_wider(names_from = year, values_from = freq) %>%
   ggplot(aes(x=`2019`, xend=`2020`, y=sjlabelled::as_label(statefip))) +
-  geom_dumbbell(color="#a3c4dc", 
-                colour_x="#edae52", 
+  geom_dumbbell(color="#a3c4dc",
+                colour_x="#edae52",
                       colour_xend = "#9fb059",
-                      size=0.75, 
-                      point.colour.l="#0e668b") + 
+                      size=0.75,
+                      point.colour.l="#0e668b") +
   scale_x_continuous(label = percent)  +
   labs(
     title = "Unemployment Rate by State",
@@ -371,7 +371,7 @@ asec_2019_2020 <- cps_svy %>%
 
 ```
 
-When conceptualizing the potential different models we could build to predict people's employment status, we were curious to see if principal components could be used as predictors. To avoid data leakage, it is necessary for the principal components to be constructed each time our model specifications run through new cross-validation folds. As such, principal component analysis needed to be part of our pre-processing, and we included it as the last step of our model recipe. Nevertheless, we had to construct a specific data set to use principal components as predictors since we needed to convert categorical variables into dummy variables without increasing their weight in the machine learning algorithms. 
+When conceptualizing the potential different models we could build to predict people's employment status, we were curious to see if principal components could be used as predictors. To avoid data leakage, it is necessary for the principal components to be constructed each time our model specifications run through new cross-validation folds. As such, principal component analysis needed to be part of our pre-processing, and we included it as the last step of our model recipe. Nevertheless, we had to construct a specific data set to use principal components as predictors since we needed to convert categorical variables into dummy variables without increasing their weight in the machine learning algorithms.
 <br>
 <br>
 We also needed to recode variables that had NA values. Most of these NAs were in categorical variables and were due to the question not being asked of the entire survey population. In these instances, we created a dummy variable for whether the variable took on a value of NA. Where the NA was in a numeric variable, we recoded it to zero in reading in the data because in these cases given that not being in the question universe means that non-respondents had a value of zero for these variables (e.g., people who did not look for work in the past year equivalently looked for work zero weeks of the past year). We did not want to impute values for these observations because they were not eligible to answer the question, and so imputation may have led to impossible or improbable sets of responses (e.g., someone who was employed for the past year but is imputed to have looked for work for 5 weeks in the past year).
@@ -465,7 +465,7 @@ asec_pca_2019_2020 <- asec_pca_2019_2020 %>%
     ),
     list( ~ case_when(. == 1 ~ 1/sqrt(50),
                       . == 0 ~ 0,
-                      TRUE ~ NA_real_)) 
+                      TRUE ~ NA_real_))
     ) %>%
   mutate_at(
     vars(
@@ -535,28 +535,28 @@ asec_pca_rec <-
   step_scale(all_numeric_predictors()) %>% # scale predictors
   step_nzv(all_numeric_predictors()) %>%   # drop near zero variance predictors
   step_pca(all_numeric(), num_comp = 20) %>%
-  themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class 
-  step_other() 
+  themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class
+  step_other()
 
 # See the engineered training data
 bake(prep(asec_pca_rec, training = asec_pca_train), new_data = asec_pca_train)
 
 # Build the model
-logistic_pca_mod <- logistic_reg(penalty = 1) %>% 
+logistic_pca_mod <- logistic_reg(penalty = 1) %>%
   set_engine("glmnet")
 
 # Create a workflow
-logistic_pca_workflow <- 
-  workflow() %>% 
-  add_model(logistic_pca_mod) %>% 
+logistic_pca_workflow <-
+  workflow() %>%
+  add_model(logistic_pca_mod) %>%
   add_recipe(asec_pca_rec)
 
 # Fit to folds
-logistic_pca_cv <- logistic_pca_workflow %>% 
+logistic_pca_cv <- logistic_pca_workflow %>%
   fit_resamples(resamples = folds_pca)
 
-# Calculate RMSE and MAE for each fold 
-collect_metrics(logistic_pca_cv, summarize = FALSE) 
+# Calculate RMSE and MAE for each fold
+collect_metrics(logistic_pca_cv, summarize = FALSE)
 
 # Select best model based on roc_auc
 logistic_pca_best <- logistic_pca_cv %>%
@@ -567,13 +567,13 @@ logistic_last_pca_workflow <- logistic_pca_workflow %>%
   finalize_workflow(parameters = logistic_pca_best)
 
 # Fit to the all training data and check feature importance
-set.seed(20220428) #Setting seed because Marlyn worries about reproducibility 
+set.seed(20220428) #Setting seed because Marlyn worries about reproducibility
 
 logistic_last_fit <- logistic_last_pca_workflow %>%
   fit(data = asec_pca_train)
 
 # Apply model to testing data
-log_reg_predictions <- bind_cols(asec_pca_test, 
+log_reg_predictions <- bind_cols(asec_pca_test,
                             predict(object = logistic_last_fit, new_data = asec_pca_test),
                             predict(object = logistic_last_fit, new_data = asec_pca_test, type = "prob"))
 
@@ -602,7 +602,7 @@ roc_auc(data = log_reg_predictions,
      estimate = .pred_0)
 ```
 
-Because were not content with the performance of our final logistic regression model, we decided to compare it to a random forest algorithm. We wanted to tune for the minimum number of data points in a node that are required for a random forest node to be split further (min_n). While we also wanted to tune for number of predictors randomly sampled at each split within individual trees (mtry), we came to realize that it was a very computationally expensive process and limited tuning to only one hyperparameter. 
+Because were not content with the performance of our final logistic regression model, we decided to compare it to a random forest algorithm. We wanted to tune for the minimum number of data points in a node that are required for a random forest node to be split further (min_n). While we also wanted to tune for number of predictors randomly sampled at each split within individual trees (mtry), we came to realize that it was a very computationally expensive process and limited tuning to only one hyperparameter.
 
 ```{r run-rf-model, results="hide"}
 # Preparing data for models
@@ -633,13 +633,13 @@ folds <- vfold_cv(data = asec_train, v = 10)
 # Create rf recipe
 rf_rec <-
   recipe(employed ~ ., data = asec_train) %>%
-  step_dummy(race, unitsstr, citizen, hispan, educ, 
-             classwly, strechlk, spmmort, whymove, 
+  step_dummy(race, unitsstr, citizen, hispan, educ,
+             classwly, strechlk, spmmort, whymove,
              health, paidgh, statefip) %>% #Dummy select categorical variables
   step_center(all_numeric_predictors()) %>% # center predictors
   step_scale(all_numeric_predictors()) %>% # scale predictors
   step_nzv(all_numeric_predictors()) %>%   # drop near zero variance predictors
-  themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class 
+  themis::step_downsample(employed) %>% # subsampling due to class imbalances between employment class
   step_other()
 
 # Build a random forest model (hyperparameter tuning for no. of trees and predictors sampled at each split)
@@ -648,9 +648,9 @@ rf_mod <- rand_forest(mtry = 10, min_n = tune(), trees = 100) %>%
   set_mode("classification")
 
 # Create a workflow
-rf_workflow <- 
-  workflow() %>% 
-  add_model(rf_mod) %>% 
+rf_workflow <-
+  workflow() %>%
+  add_model(rf_mod) %>%
   add_recipe(rf_rec)
 
 # Create a grid of the parameters we're tuning for
@@ -664,7 +664,7 @@ rf_cv <- tune_grid(rf_workflow,
                    grid = rf_grid,
                    metrics = metric_set(roc_auc))
 
-#Calculate ROC_AUC and accuracy for each fold 
+#Calculate ROC_AUC and accuracy for each fold
 collect_metrics(rf_cv, summarize = TRUE) %>%
   filter(.metric == "roc_auc")
 
@@ -693,12 +693,12 @@ rf_last_fit <- rf_last_workflow %>%
 rf_last_fit %>%
   extract_fit_parsnip() %>%
   vip::vip(num_features = 20)
-  
+
 ```
 
 ``` {r rf-model-to-test, results="hide"}
 # Apply model to testing data
-rf_predictions <- bind_cols(asec_test, 
+rf_predictions <- bind_cols(asec_test,
                             predict(object = rf_last_fit, new_data = asec_test),
                             predict(object = rf_last_fit, new_data = asec_test, type = "prob"))
 
@@ -729,7 +729,7 @@ roc_auc(data = rf_predictions,
 
 The area under the curve for our best RF model was 0.75, which is acceptable but not _superb_. We also are interested in the specificity of our model because policy practitioners looking to target unemployed folks for unemployment assistance or workforce opportunities are likely going to want to know how often our model is right when it predicts unemployment. Our model is correct 75% of the time it predicts unemployment. Ideally, we would want better precision so that we could be assured that any money spent on outreach would be well-invested.
 
-Now equipped with the best model, we wanted to see if it would also make precise predictions for new data! We used 2021 IPUMS data that had been excluded from our training set. Essentially, we wanted to assess whether our model that was trained on 2019 and 2020 data could make as good predictions for 2021 data. 
+Now equipped with the best model, we wanted to see if it would also make precise predictions for new data! We used 2021 IPUMS data that had been excluded from our training set. Essentially, we wanted to assess whether our model that was trained on 2019 and 2020 data could make as good predictions for 2021 data.
 
 ``` {r run-model-2021-data, results="hide"}
 
@@ -745,7 +745,7 @@ asec2021_models <- as_tibble(asec2021) %>%
                  strechlk, spmmort, whymove, health, paidgh, statefip), list(~ as.factor(.)))
 
 # Apply model to 2021 data
-rf_predictions_2021 <- bind_cols(asec2021_models, 
+rf_predictions_2021 <- bind_cols(asec2021_models,
                             predict(object = rf_last_fit, new_data = asec2021_models),
                             predict(object = rf_last_fit, new_data = asec2021_models, type = "prob"))
 ```
@@ -775,7 +775,7 @@ roc_auc(data = rf_predictions_2021,
 
 ##How well does our model perform if applied to specific demographic groups?
 
-While our model fared well enough when we made predictions on IPUMS 2021 data [EDIT IF NOT], we wanted to see if the model would perform just as well if we were to restrict the population we wanted to predict employment status for. We decided to make predictions on a sample of  immigrants (excluding US native-born citizens) because we understood immigrants experienced the onset of COVID-19 in nuanced ways. For example, the below graph illustrates surprising find: while it's well-documented that the US unemployment rate rose during the course of the pandemic, the unemployment rate of US nativeborn citizens surpassed the rate for immigrants. 
+While our model fared well enough when we made predictions on IPUMS 2021 data [EDIT IF NOT], we wanted to see if the model would perform just as well if we were to restrict the population we wanted to predict employment status for. We decided to make predictions on a sample of  immigrants (excluding US native-born citizens) because we understood immigrants experienced the onset of COVID-19 in nuanced ways. For example, the below graph illustrates surprising find: while it's well-documented that the US unemployment rate rose during the course of the pandemic, the unemployment rate of US nativeborn citizens surpassed the rate for immigrants.
 
 
 ``` {r Immigrant-Specific-Visualization}
@@ -788,7 +788,7 @@ a <- asec_allyears %>%
   group_by(year, immigrant) %>%
   mutate(immigrant = as.factor(immigrant)) %>%
   summarize(count = n(),
-            pct_unemployed = (1-mean(employed))) 
+            pct_unemployed = (1-mean(employed)))
 
 a %>%
   ggplot(aes(x= year, y= pct_unemployed)) +
@@ -802,7 +802,7 @@ a %>%
     color = "Immigrant Status"
   ) +
   scale_y_continuous(labels = scales::percent, limits = c(0,.10)) +
-  scale_x_continuous(breaks = seq(2019, 2021, 1), 
+  scale_x_continuous(breaks = seq(2019, 2021, 1),
                      limits=c(2019, 2021)) +
   scale_color_discrete(labels = c("Nonimmigrant", "Immigrant")) +
   theme_minimal()
@@ -825,7 +825,7 @@ asec_model_imm <- as_tibble(asec2021_imm) %>%
                  strechlk, spmmort, whymove, health, paidgh, statefip), list(~ as.factor(.)))
 
 # Apply model to 2021 immigrant data
-rf_predictions_imm <- bind_cols(asec_model_imm, 
+rf_predictions_imm <- bind_cols(asec_model_imm,
                                  predict(object = rf_last_fit, new_data = asec_model_imm),
                                  predict(object = rf_last_fit, new_data = asec_model_imm, type = "prob"))
 ```
