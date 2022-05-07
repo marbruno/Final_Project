@@ -1,0 +1,10 @@
+name: "Using Predictive Analytics to Understand the Impacts of COVID-19 on Unemployment in the U.S."
+output_dir: "docs"
+navbar:
+  title: "Intro to Data Science - Final Project"
+  left:
+  - text: "Home"
+    href: final_project_pages.html
+output:
+  html_document:
+    theme: cosmo
