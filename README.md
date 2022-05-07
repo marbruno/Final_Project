@@ -9,7 +9,7 @@ This project's objective is to develop a model for predicting an individual's ec
 ## Files in the repository:
 - **Final_Project.Rmd**: This file contains the R code to carry out the analysis for the final project. Plain text and comments in the code chunks clarify what is being done in each part of the code. It was separated into chunks for readability and to clearly identify which exercise is being completed.
 
-- **Final_Project.html**: This file contains the result of the R code after knitting the Final_Project.Rmd file.
+- **Final_Project.html**: This file contains the result of the R code after knitting the Final_Project.Rmd file (unformatted).
 
 - **modeling.R**: This file contains specific archived code for building and running our machine learning models. All code was eventually transferred to our Final_Project.Rmd file and finalized there.
 
