@@ -1,5 +1,7 @@
 # Final Project
 # Authors: Sylvia Brown, Pierina Forastieri, Marlyn Bruno, Julia Buschmann
+
+### Pages (here)[https://sbrown5x.github.io/Final_Project/]
  
 ## Objective:
 This project's objective is to develop a model for predicting an individual's economic precarity as a product of the recessionary impacts of a pandemic, which could possibly be generalized to natural disasters with similar effects. We identify the variables to include as predictors in our predictive model with Principal Components Analysis (PCA) to generate uncorrelated components that capture a portion of the variance within these variables. Using both our original predictors and the resulting PCs, we generate a random forest model and a logistic regression model trained on ASEC data from 2019 and 2020 to predict whether an individual was employed. We then implement the best model (selected by identifying the model with the highest area under the ROC curve) on data from 2021 to test its accuracy in predicting whether an individual was employed in the second year of the pandemic. We also test the model on a subset of the population (i.e., immigrants) to see if the model, which was developed with both immigrants and non-immigrants, is generalizable to only immigrants. With a model like this, we can predict the employment status for future individuals for whom we have data on their characteristics (e.g., income, state, type of health insurance) so that when a future pandemic or natural disaster happens, policymakers will be better equipped to understand who to target support towards.
@@ -14,6 +16,8 @@ This project's objective is to develop a model for predicting an individual's ec
 - **README.md**: This README.md file contains a brief overview of the objective of the code, the files included in the repository, and instructions for replicating our analysis. 
 
 - **gitignore**: This file contains the files used for this code that we choose to exclude from the GitHub repository.
+
+- 
 
 
 ## Instructions for this Final Project:
