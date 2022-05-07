@@ -1,15 +1,5 @@
 ---
-title: "GitHub Pages"
-knit: (function(input_file, encoding) {
-    out_dir <- 'docs';
-    rmarkdown::render(input_file,
-      encoding=encoding,
-      output_file=file.path(dirname(input_file), out_dir, 'index.html'))})
-author: "Julia Buschmann, Marlyn Bruno, Pierina Forastieri Santiago, and Sylvia Brown"
-date: "5/6/2022"
-output: 
-  html_document:
-    code_folding: "hide"
+title: "Using Predictive Analytics to Understand the Impacts of COVID-19 on Unemployment in the U.S."
 ---
 
 ```{r setup, include=FALSE}
